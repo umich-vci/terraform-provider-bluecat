@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/umich-vci/golang-bluecat"
@@ -17,16 +18,42 @@ func dataSourceIP4NetworkByName() *schema.Resource {
 				Type:     schema.TypeString,
 				Required: true,
 			},
+			"start": &schema.Schema{
+				Type:     schema.TypeInt,
+				Optional: true,
+				Default:  0,
+			},
+			"result_count": &schema.Schema{
+				Type:     schema.TypeInt,
+				Optional: true,
+				Default:  1,
+			},
 			"name": &schema.Schema{
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			"properties": &schema.Schema{
+			"type": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"type": &schema.Schema{
+			"cidr": &schema.Schema{
 				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"allow_duplicate_host": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"inherit_allow_duplicate_host": &schema.Schema{
+				Type:     schema.TypeBool,
+				Computed: true,
+			},
+			"ping_before_assign": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"inherit_ping_before_assign": &schema.Schema{
+				Type:     schema.TypeBool,
 				Computed: true,
 			},
 		},
@@ -46,8 +73,8 @@ func dataSourceIP4NetworkByNameRead(d *schema.ResourceData, meta interface{}) er
 		mutex.Unlock()
 		return err
 	}
-	start := 0
-	count := 10
+	start := d.Get("start").(int)
+	count := d.Get("result_count").(int)
 	name := d.Get("name").(string)
 
 	options := "hint=" + name
@@ -59,13 +86,11 @@ func dataSourceIP4NetworkByNameRead(d *schema.ResourceData, meta interface{}) er
 	}
 
 	matches := 0
-
+	matchLocation := -1
 	for x := range resp.Item {
 		if *resp.Item[x].Name == name {
-			d.SetId(strconv.FormatInt(*resp.Item[x].Id, 10))
-			d.Set("properties", resp.Item[x].Properties)
-			d.Set("type", resp.Item[x].Type)
 			matches++
+			matchLocation = x
 		}
 	}
 
@@ -74,6 +99,46 @@ func dataSourceIP4NetworkByNameRead(d *schema.ResourceData, meta interface{}) er
 		if err = bam.LogoutClientIfError(client, err, "No exact IP4 network match found for name"); err != nil {
 			mutex.Unlock()
 			return err
+		}
+	}
+
+	d.SetId(strconv.FormatInt(*resp.Item[matchLocation].Id, 10))
+	d.Set("type", resp.Item[matchLocation].Type)
+
+	props := strings.Split(d.Get("properties").(string), "|")
+	for x := range props {
+		if len(props[x]) > 0 {
+			prop := strings.Split(props[x], "=")[0]
+			val := strings.Split(props[x], "=")[1]
+
+			switch prop {
+			case "CIDR":
+				d.Set("cidr", val)
+			case "allowDuplicateHost":
+				d.Set("allow_duplicate_host", val)
+			case "inheritAllowDuplicateHost":
+				b, err := strconv.ParseBool(val)
+				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritAllowDuplicateHost to bool"); err != nil {
+					mutex.Unlock()
+					return err
+				}
+				d.Set("inherit_allow_duplicate_host", b)
+			case "pingBeforeAssign":
+				d.Set("ping_before_assign", val)
+			case "inheritPingBeforeAssign":
+				b, err := strconv.ParseBool(val)
+				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritPingBeforeAssign to bool"); err != nil {
+					mutex.Unlock()
+					return err
+				}
+				d.Set("inherit_ping_before_assign", b)
+			default:
+				err := fmt.Errorf("Unknown IP4 Network Property: %s", val)
+				if err = bam.LogoutClientIfError(client, err, "Unknown IP4 Network Property"); err != nil {
+					mutex.Unlock()
+					return err
+				}
+			}
 		}
 	}
 
