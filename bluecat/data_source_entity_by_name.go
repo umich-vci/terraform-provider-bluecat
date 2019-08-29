@@ -15,7 +15,7 @@ func dataSourceEntityByName() *schema.Resource {
 		Read: dataSourceEntityByNameRead,
 		Schema: map[string]*schema.Schema{
 			"parent_id": &schema.Schema{
-				Type:     schema.TypeInt,
+				Type:     schema.TypeString,
 				Optional: true,
 				Default:  0,
 			},
@@ -48,10 +48,14 @@ func dataSourceEntityByNameRead(d *schema.ResourceData, meta interface{}) error 
 	if err != nil {
 		return fmt.Errorf("Login error: %s", err)
 	}
-	parentID := d.Get("parent_id").(int)
+	parentID, err := strconv.ParseInt(d.Get("parent_id").(string), 10, 64)
+	if err = bam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
+		mutex.Unlock()
+		return err
+	}
 	name := d.Get("name").(string)
 	objType := d.Get("type").(string)
-	resp, err := client.GetEntityByName(int64(parentID), name, objType)
+	resp, err := client.GetEntityByName(parentID, name, objType)
 	if err = bam.LogoutClientIfError(client, err, "Failed to get entity by name: %s"); err != nil {
 		mutex.Unlock()
 		return err

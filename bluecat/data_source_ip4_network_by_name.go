@@ -14,7 +14,7 @@ func dataSourceIP4NetworkByName() *schema.Resource {
 		Read: dataSourceIP4NetworkByNameRead,
 		Schema: map[string]*schema.Schema{
 			"container_id": &schema.Schema{
-				Type:     schema.TypeInt,
+				Type:     schema.TypeString,
 				Required: true,
 			},
 			"name": &schema.Schema{
@@ -41,14 +41,18 @@ func dataSourceIP4NetworkByNameRead(d *schema.ResourceData, meta interface{}) er
 		return err
 	}
 
-	containerID := d.Get("container_id").(int)
+	containerID, err := strconv.ParseInt(d.Get("container_id").(string), 10, 64)
+	if err = bam.LogoutClientIfError(client, err, "Unable to convert container_id from string to int64"); err != nil {
+		mutex.Unlock()
+		return err
+	}
 	start := 0
 	count := 10
 	name := d.Get("name").(string)
 
 	options := "hint=" + name
 
-	resp, err := client.GetIP4NetworksByHint(int64(containerID), start, count, options)
+	resp, err := client.GetIP4NetworksByHint(containerID, start, count, options)
 	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint: %s"); err != nil {
 		mutex.Unlock()
 		return err
