@@ -10,9 +10,9 @@ import (
 	"github.com/umich-vci/golang-bluecat"
 )
 
-func dataSourceEntity() *schema.Resource {
+func dataSourceEntityByName() *schema.Resource {
 	return &schema.Resource{
-		Read: dataSourceEntityRead,
+		Read: dataSourceEntityByNameRead,
 		Schema: map[string]*schema.Schema{
 			"parent_id": &schema.Schema{
 				Type:     schema.TypeInt,
@@ -36,7 +36,7 @@ func dataSourceEntity() *schema.Resource {
 	}
 }
 
-func dataSourceEntityRead(d *schema.ResourceData, meta interface{}) error {
+func dataSourceEntityByNameRead(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
 	config := meta.(*Config)
 	client, err := meta.(*Config).Client()
