@@ -105,7 +105,7 @@ func dataSourceIP4NetworkByNameRead(d *schema.ResourceData, meta interface{}) er
 	d.SetId(strconv.FormatInt(*resp.Item[matchLocation].Id, 10))
 	d.Set("type", resp.Item[matchLocation].Type)
 
-	props := strings.Split(d.Get("properties").(string), "|")
+	props := strings.Split(*resp.Item[matchLocation].Properties, "|")
 	for x := range props {
 		if len(props[x]) > 0 {
 			prop := strings.Split(props[x], "=")[0]
