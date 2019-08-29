@@ -1,116 +1,55 @@
 package bluecat
 
 import (
-	"fmt"
+	"net/http"
 	"sync"
 
-	"github.com/hashicorp/go-multierror"
 	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/tiaguinho/gosoap"
+	"github.com/hashicorp/terraform/terraform"
 )
 
+func providerConfigure(d *schema.ResourceData) (interface{}, error) {
+	config := &Config{
+		Username:        d.Get("username").(string),
+		Password:        d.Get("password").(string),
+		BlueCatEndpoint: d.Get("bluecat_endpoint").(string),
+		SessionCookies:  []*http.Cookie{},
+	}
+
+	return config, nil
+}
+
 // Provider returns a terraform resource provider
-func Provider() *schema.Provider {
+func Provider() terraform.ResourceProvider {
 	return &schema.Provider{
-		ResourcesMap: map[string]*schema.Resource{
-			"static_ipv4_address": resourceStaticIPv4Address(),
+		Schema: map[string]*schema.Schema{
+			"username": {
+				Type:        schema.TypeString,
+				Required:    true,
+				DefaultFunc: schema.EnvDefaultFunc("BLUECAT_USERNAME", nil),
+				Description: "A BlueCat Address Manager username.",
+			},
+			"password": {
+				Type:        schema.TypeString,
+				Required:    true,
+				DefaultFunc: schema.EnvDefaultFunc("BLUECAT_PASSWORD", nil),
+				Description: "The BlueCat Address Manager password.",
+			},
+			"bluecat_endpoint": {
+				Type:        schema.TypeString,
+				Required:    true,
+				DefaultFunc: schema.EnvDefaultFunc("BLUECAT_ENDPOINT", nil),
+				Description: "The BlueCat Address Manager endpoint hostname",
+			},
 		},
+		ResourcesMap: map[string]*schema.Resource{
+			"bluecat_static_ipv4_address": resourceStaticIPv4Address(),
+		},
+		DataSourcesMap: map[string]*schema.Resource{
+			"bluecat_entity": dataSourceEntity(),
+		},
+		ConfigureFunc: providerConfigure,
 	}
 }
 
 var mutex = &sync.Mutex{}
-
-func logoutClientIfError(client *gosoap.Client, err error, msg string) error {
-	if err != nil {
-		var result error
-		result = multierror.Append(err)
-		params := gosoap.Params{}
-
-		if _, lerr := client.Call("logout", params); err != nil {
-			result = multierror.Append(lerr)
-		}
-		return fmt.Errorf(msg, result)
-	}
-	return nil
-}
-
-// ObjectTypes contains all valid object types in the BlueCat API
-var ObjectTypes = []string{
-	"Entity",
-	"Configuration",
-	"View",
-	"Zone",
-	"InternalRootZone",
-	"ZoneTemplate",
-	"EnumZone",
-	"EnumNumber",
-	"HostRecord",
-	"AliasRecord",
-	"MXRecord",
-	"TXTRecord",
-	"SRVRecord",
-	"GenericRecord",
-	"HINFORecord",
-	"NAPTRRecord",
-	"RecordWithLink",
-	"ExternalHostRecord",
-	"StartOfAuthority",
-	"IP4Block",
-	"IP4Network",
-	"IP6Block",
-	"IP6Network",
-	"IP6Address",
-	"IP4NetworkTemplate",
-	"DHCP4Range",
-	"DHCP6Range",
-	"IP4Address",
-	"MACPool",
-	"DenyMACPool",
-	"MACAddress",
-	"TagGroup",
-	"Tag",
-	"User",
-	"UserGroup",
-	"Server",
-	"ServerGroup",
-	"NetworkServerInterface",
-	"PublishedServerInterface",
-	"NetworkInterface",
-	"VirtualInterface",
-	"LDAP",
-	"Kerberos",
-	"KerberosRealm",
-	"Radius",
-	"TFTPGroup",
-	"TFTPFolder",
-	"TFTPFile",
-	"TFTPDeploymentRole",
-	"DNSDeploymentRole",
-	"DHCPDeploymentRole",
-	"DNSOption",
-	"DHCPV4ClientOption",
-	"DHCPServiceOption",
-	"DHCPRawOption",
-	"DNSRawOption",
-	"DHCPV6ClientOption",
-	"DHCPV6ServiceOption",
-	"DHCPV6RawOption",
-	"VendorProfile",
-	"VendorOptionDef",
-	"VendorClientOption",
-	"CustomOptionDef",
-	"DHCPMatchClass",
-	"DHCPSubClass",
-	"Device",
-	"DeviceType",
-	"DeviceSubtype",
-	"DeploymentScheduler",
-	"IP4ReconciliationPolicy",
-	"DNSSECSigningPolicy",
-	"IP4IPGroup",
-	"ResponsePolicy",
-	"TSIGKey",
-	"RPZone",
-	"Location",
-	"InterfaceID",
-}

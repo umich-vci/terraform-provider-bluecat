@@ -18,25 +18,25 @@ func resourceStaticIPv4Address() *schema.Resource {
 			},
 			"ipv4_address": &schema.Schema{
 				Type:     schema.TypeString,
-				Required: false,
+				Optional: true,
 			},
 			"mac_address": &schema.Schema{
 				Type:     schema.TypeString,
-				Required: true,
+				Optional: true,
 				Default:  "",
 			},
 			"host_info": &schema.Schema{
 				Type:     schema.TypeString,
-				Required: true,
+				Optional: true,
 				Default:  "",
 			},
 			"parent_id": &schema.Schema{
 				Type:     schema.TypeString,
-				Required: false,
+				Optional: true,
 			},
 			"properties": &schema.Schema{
 				Type:     schema.TypeString,
-				Required: true,
+				Optional: true,
 				Default:  "",
 			},
 		},

@@ -1,10 +1,12 @@
 package bluecat
 
 import (
+	"fmt"
 	"log"
+	"net/http"
 
-	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/tiaguinho/gosoap"
+	"github.com/fiorix/wsdl2go/soap"
+	"github.com/umich-vci/golang-bluecat"
 )
 
 // Config holds the provider configuration
@@ -12,46 +14,35 @@ type Config struct {
 	Username        string
 	Password        string
 	BlueCatEndpoint string
+	SessionCookies  []*http.Cookie
 }
 
-// NewConfig returns a new Config from a supplied ResourceData.
-func NewConfig(d *schema.ResourceData) (*Config, error) {
-	c := &Config{
-		Username:        d.Get("username").(string),
-		Password:        d.Get("password").(string),
-		BlueCatEndpoint: d.Get("bluecat_endpoint").(string),
+// Client returns a new client for accessing BlueCat Address Manager
+func (c *Config) Client() (bam.ProteusAPI, error) {
+	//var response *http.Response
+	cli := soap.Client{
+		URL:       "https://" + c.BlueCatEndpoint + "/Services/API?wsdl",
+		Namespace: bam.Namespace,
+		Pre:       c.setBlueCatAuthToken,
+		Post:      c.getBlueCatAuthToken,
 	}
+	soapService := bam.NewProteusAPI(&cli)
+	log.Printf("[INFO] BlueCat URL is: %s", cli.URL)
+	err := soapService.Login(c.Username, c.Password)
+	if err != nil {
+		return nil, fmt.Errorf("Login error: %s", err)
+	}
+	log.Printf("[INFO] BlueCat Login was successful")
 
-	return c, nil
+	return soapService, nil
 }
 
-func providerConfigure(d *schema.ResourceData) (interface{}, error) {
-	c, err := NewConfig(d)
-	if err != nil {
-		return nil, err
+func (c *Config) setBlueCatAuthToken(request *http.Request) {
+	for i := range c.SessionCookies {
+		request.AddCookie(c.SessionCookies[i])
 	}
-
-	return c, nil
 }
 
-// Client returns a new client for accessing BlueCat.
-func (c *Config) Client() (*gosoap.Client, error) {
-	wdsl := "https://" + c.BlueCatEndpoint + "/Services/API?wsdl"
-	client, err := gosoap.SoapClient(wdsl)
-
-	if err != nil {
-		log.Fatalf("SoapClient error: %s", err)
-	}
-
-	params := gosoap.Params{
-		"username": c.Username,
-		"password": c.Password,
-	}
-
-	_, err = client.Call("login", params)
-	if err != nil {
-		log.Fatalf("SoapClient login error: %s", err)
-	}
-
-	return client, nil
+func (c *Config) getBlueCatAuthToken(response *http.Response) {
+	(*c).SessionCookies = append((*c).SessionCookies, response.Cookies()...)
 }
