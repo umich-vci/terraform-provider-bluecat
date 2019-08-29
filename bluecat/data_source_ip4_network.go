@@ -10,9 +10,9 @@ import (
 	"github.com/umich-vci/golang-bluecat"
 )
 
-func dataSourceIP4NetworkByName() *schema.Resource {
+func dataSourceIP4Network() *schema.Resource {
 	return &schema.Resource{
-		Read: dataSourceIP4NetworkByNameRead,
+		Read: dataSourceIP4NetworkRead,
 		Schema: map[string]*schema.Schema{
 			"container_id": &schema.Schema{
 				Type:     schema.TypeString,
@@ -60,7 +60,7 @@ func dataSourceIP4NetworkByName() *schema.Resource {
 	}
 }
 
-func dataSourceIP4NetworkByNameRead(d *schema.ResourceData, meta interface{}) error {
+func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
 	client, err := meta.(*Config).Client()
 	if err != nil {
