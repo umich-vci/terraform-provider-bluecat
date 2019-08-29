@@ -1,7 +1,6 @@
 package bluecat
 
 import (
-	"net/http"
 	"sync"
 
 	"github.com/hashicorp/terraform/helper/schema"
@@ -13,7 +12,6 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 		Username:        d.Get("username").(string),
 		Password:        d.Get("password").(string),
 		BlueCatEndpoint: d.Get("bluecat_endpoint").(string),
-		SessionCookies:  []*http.Cookie{},
 	}
 
 	return config, nil
