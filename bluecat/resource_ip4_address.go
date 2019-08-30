@@ -142,7 +142,7 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 			case "state":
 				d.Set("state", val)
 			default:
-				log.Printf("[WARN]Unknown IP4 Address Property: %s", prop)
+				log.Printf("[WARN] Unknown IP4 Address Property: %s", prop)
 			}
 		}
 	}
@@ -165,20 +165,25 @@ func resourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 		mutex.Unlock()
 		return err
 	}
-	parentID, err := strconv.ParseInt(d.Get("parent_id").(string), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
-		mutex.Unlock()
-		return err
-	}
-	address := d.Get("address").(string)
 
-	resp, err := client.GetIP4Address(parentID, address)
-	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Address"); err != nil {
+	id, err := strconv.ParseInt(d.Id(), 10, 64)
+	if err = bam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
 
-	d.SetId(strconv.FormatInt(*resp.Id, 10))
+	resp, err := client.GetEntityById(id)
+	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Address by Id"); err != nil {
+		mutex.Unlock()
+		return err
+	}
+
+	if *resp.Id == 0 {
+		d.SetId("")
+		return nil
+	}
+
+	//d.SetId(strconv.FormatInt(*resp.Id, 10))
 	d.Set("name", resp.Name)
 	d.Set("properties", resp.Properties)
 	d.Set("type", resp.Type)
@@ -202,7 +207,7 @@ func resourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 			case "state":
 				d.Set("state", val)
 			default:
-				log.Printf("[WARN]Unknown IP4 Address Property: %s", prop)
+				log.Printf("[WARN] Unknown IP4 Address Property: %s", prop)
 			}
 		}
 	}
@@ -234,6 +239,16 @@ func resourceIP4AddressDelete(d *schema.ResourceData, meta interface{}) error {
 	if err = bam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
+	}
+
+	resp, err := client.GetEntityById(id)
+	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Address by Id"); err != nil {
+		mutex.Unlock()
+		return err
+	}
+
+	if *resp.Id == 0 {
+		return nil
 	}
 
 	err = client.Delete(id)
