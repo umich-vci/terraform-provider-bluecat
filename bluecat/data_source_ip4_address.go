@@ -49,6 +49,10 @@ func dataSourceIP4Address() *schema.Resource {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
+			"mac_address": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
 		},
 	}
 }
@@ -97,6 +101,8 @@ func dataSourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 				// 	d.Set("address", val)
 			case "state":
 				d.Set("state", val)
+			case "macAddress":
+				d.Set("mac_address", val)
 			default:
 				log.Printf("[WARN]Unknown IP4 Address Property: %s", prop)
 			}
