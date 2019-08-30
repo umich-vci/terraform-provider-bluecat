@@ -1,7 +1,6 @@
 package bluecat
 
 import (
-	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -99,11 +98,7 @@ func dataSourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 			case "state":
 				d.Set("state", val)
 			default:
-				err := fmt.Errorf("Unknown IP4 Address Property: %s", prop)
-				if err = bam.LogoutClientIfError(client, err, "Unknown IP4 Address Property"); err != nil {
-					mutex.Unlock()
-					return err
-				}
+				log.Printf("[WARN]Unknown IP4 Address Property: %s", prop)
 			}
 		}
 	}
