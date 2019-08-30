@@ -1,7 +1,6 @@
 package bluecat
 
 import (
-	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -20,43 +19,65 @@ func resourceIP4Address() *schema.Resource {
 
 		Schema: map[string]*schema.Schema{
 			"configuration_id": &schema.Schema{
-				Type:     schema.TypeInt,
+				Type:     schema.TypeString,
 				Required: true,
+				ForceNew: true,
 			},
 			"parent_id": &schema.Schema{
-				Type:     schema.TypeInt,
+				Type:     schema.TypeString,
 				Required: true,
+				ForceNew: true,
 			},
 			"mac_address": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
 				Default:  "",
 			},
-			"host_info": &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
-				Default:  "",
-			},
+			// host records should be created in a separate resource
+			// "host_info": &schema.Schema{
+			// 	Type:     schema.TypeString,
+			// 	Optional: true,
+			// 	Default:  "",
+			// },
 			"action": &schema.Schema{
 				Type:         schema.TypeString,
 				Optional:     true,
 				Default:      "MAKE_STATIC",
+				ForceNew:     true,
 				ValidateFunc: validation.StringInSlice(bam.IPAssignmentActions, false),
 			},
-			"properties": &schema.Schema{
+			"name": &schema.Schema{
+				Type:     schema.TypeString,
+				Required: true,
+			},
+			"assigned_date": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
 				Default:  "",
 			},
-			"name": &schema.Schema{
+			"requested_by": &schema.Schema{
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  "",
+			},
+			"notes": &schema.Schema{
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  "",
+			},
+			"address": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"properties": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"state": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
 			},
 			"type": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"ip4_address": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
 			},
@@ -83,9 +104,14 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 	macAddress := d.Get("mac_address").(string)
-	hostInfo := d.Get("host_info").(string)
+	//hostInfo := d.Get("host_info").(string)
+	hostInfo := "" // host records should be created as a separate resource
 	action := d.Get("action").(string)
-	properties := d.Get("properties").(string)
+	requestedBy := d.Get("requested_by").(string)
+	assignedDate := d.Get("assigned_date").(string)
+	notes := d.Get("notes").(string)
+	name := d.Get("name").(string)
+	properties := "Requested_by=" + requestedBy + "|Assigned_Date=" + assignedDate + "|Notes=" + notes + "|name=" + name
 
 	resp, err := client.AssignNextAvailableIP4Address(configID, parentID, macAddress, hostInfo, action, properties)
 	if err = bam.LogoutClientIfError(client, err, "AssignNextAvailableIP4Address failed"); err != nil {
@@ -98,6 +124,37 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 	d.Set("properties", resp.Properties)
 	d.Set("type", resp.Type)
 
+	props := strings.Split(*resp.Properties, "|")
+	for x := range props {
+		if len(props[x]) > 0 {
+			prop := strings.Split(props[x], "=")[0]
+			val := strings.Split(props[x], "=")[1]
+
+			switch prop {
+			case "Assigned_Date":
+				d.Set("assigned_date", val)
+			case "Requested_by":
+				d.Set("requested_by", val)
+			case "Notes":
+				d.Set("notes", val)
+			case "address":
+				d.Set("address", val)
+			case "state":
+				d.Set("state", val)
+			default:
+				log.Printf("[WARN]Unknown IP4 Address Property: %s", prop)
+			}
+		}
+	}
+
+	// logout client
+	if err := client.Logout(); err != nil {
+		mutex.Unlock()
+		return err
+	}
+	log.Printf("[INFO] BlueCat Logout was successful")
+	mutex.Unlock()
+
 	return resourceIP4AddressRead(d, meta)
 }
 
@@ -108,11 +165,15 @@ func resourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 		mutex.Unlock()
 		return err
 	}
-	parentID := d.Get("parent_id").(int)
-	ipv4Address := d.Get("ip4_address").(string)
+	parentID, err := strconv.ParseInt(d.Get("parent_id").(string), 10, 64)
+	if err = bam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
+		mutex.Unlock()
+		return err
+	}
+	address := d.Get("address").(string)
 
-	resp, err := client.GetIP4Address(int64(parentID), ipv4Address)
-	if err = bam.LogoutClientIfError(client, err, "Failed to get entity by name: %s"); err != nil {
+	resp, err := client.GetIP4Address(parentID, address)
+	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Address"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -141,11 +202,7 @@ func resourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 			case "state":
 				d.Set("state", val)
 			default:
-				err := fmt.Errorf("Unknown IP4 Address Property: %s", val)
-				if err = bam.LogoutClientIfError(client, err, "Unknown IP4 Address Property"); err != nil {
-					mutex.Unlock()
-					return err
-				}
+				log.Printf("[WARN]Unknown IP4 Address Property: %s", prop)
 			}
 		}
 	}
