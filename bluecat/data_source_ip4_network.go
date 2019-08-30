@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform/helper/validation"
 	"github.com/umich-vci/golang-bluecat"
 )
 
@@ -28,9 +29,23 @@ func dataSourceIP4Network() *schema.Resource {
 				Optional: true,
 				Default:  1,
 			},
-			"name": &schema.Schema{
+			"hint": &schema.Schema{
 				Type:     schema.TypeString,
 				Required: true,
+			},
+			"hint_type": &schema.Schema{
+				Type:         schema.TypeString,
+				Required:     true,
+				ValidateFunc: validation.StringInSlice([]string{"name", "cidr"}, false),
+			},
+
+			"name": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"properties": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
 			},
 			"type": &schema.Schema{
 				Type:     schema.TypeString,
@@ -75,9 +90,10 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	}
 	start := d.Get("start").(int)
 	count := d.Get("result_count").(int)
-	name := d.Get("name").(string)
+	hint := d.Get("hint").(string)
+	hintType := d.Get("hint_type").(string)
 
-	options := "hint=" + name
+	options := "hint=" + hint + "|"
 
 	resp, err := client.GetIP4NetworksByHint(containerID, start, count, options)
 	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint: %s"); err != nil {
@@ -85,24 +101,44 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 
+	log.Printf("[INFO] GetIP4NetworksByHint returned %s results", strconv.Itoa(len(resp.Item)))
+
 	matches := 0
 	matchLocation := -1
 	for x := range resp.Item {
-		if *resp.Item[x].Name == name {
-			matches++
-			matchLocation = x
+		if hintType == "name" {
+			if *resp.Item[x].Name == hint {
+				matches++
+				matchLocation = x
+			}
+		} else if hintType == "cidr" {
+			properties := *resp.Item[x].Properties
+			props := strings.Split(properties, "|")
+			for y := range props {
+				if len(props[y]) > 0 {
+					prop := strings.Split(props[y], "=")[0]
+					val := strings.Split(props[y], "=")[1]
+					if prop == "CIDR" && strings.Split(val, "/")[0] == hint {
+						log.Printf("[INFO] CIDR found is %s", val)
+						matches++
+						matchLocation = x
+					}
+				}
+			}
 		}
 	}
 
 	if matches == 0 || matches > 1 {
-		err := fmt.Errorf("No exact IP4 network match found for name: %s", name)
-		if err = bam.LogoutClientIfError(client, err, "No exact IP4 network match found for name"); err != nil {
+		err := fmt.Errorf("No exact IP4 network match found for: %s", hint)
+		if err = bam.LogoutClientIfError(client, err, "No exact IP4 network match found for hint"); err != nil {
 			mutex.Unlock()
 			return err
 		}
 	}
 
 	d.SetId(strconv.FormatInt(*resp.Item[matchLocation].Id, 10))
+	d.Set("name", *resp.Item[matchLocation].Name)
+	d.Set("properties", *resp.Item[matchLocation].Properties)
 	d.Set("type", resp.Item[matchLocation].Type)
 
 	props := strings.Split(*resp.Item[matchLocation].Properties, "|")
