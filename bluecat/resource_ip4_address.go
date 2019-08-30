@@ -111,7 +111,7 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 	assignedDate := d.Get("assigned_date").(string)
 	notes := d.Get("notes").(string)
 	name := d.Get("name").(string)
-	properties := "Requested_by=" + requestedBy + "|Assigned_Date=" + assignedDate + "|Notes=" + notes + "|name=" + name
+	properties := "Requested_by=" + requestedBy + "|Assigned_Date=" + assignedDate + "|Notes=" + notes + "|name=" + name + "|"
 
 	resp, err := client.AssignNextAvailableIP4Address(configID, parentID, macAddress, hostInfo, action, properties)
 	if err = bam.LogoutClientIfError(client, err, "AssignNextAvailableIP4Address failed"); err != nil {
@@ -223,5 +223,32 @@ func resourceIP4AddressUpdate(d *schema.ResourceData, meta interface{}) error {
 }
 
 func resourceIP4AddressDelete(d *schema.ResourceData, meta interface{}) error {
+	mutex.Lock()
+	client, err := meta.(*Config).Client()
+	if err != nil {
+		mutex.Unlock()
+		return err
+	}
+
+	id, err := strconv.ParseInt(d.Id(), 10, 64)
+	if err = bam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
+		mutex.Unlock()
+		return err
+	}
+
+	err = client.Delete(id)
+	if err = bam.LogoutClientIfError(client, err, "Delete failed"); err != nil {
+		mutex.Unlock()
+		return err
+	}
+
+	// logout client
+	if err := client.Logout(); err != nil {
+		mutex.Unlock()
+		return err
+	}
+	log.Printf("[INFO] BlueCat Logout was successful")
+	mutex.Unlock()
+
 	return nil
 }
