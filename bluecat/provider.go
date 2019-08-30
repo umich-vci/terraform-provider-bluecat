@@ -45,6 +45,7 @@ func Provider() terraform.ResourceProvider {
 		},
 		DataSourcesMap: map[string]*schema.Resource{
 			"bluecat_entity_by_name": dataSourceEntityByName(),
+			"bluecat_host_record":    dataSourceHostRecord(),
 			"bluecat_ip4_network":    dataSourceIP4Network(),
 			"bluecat_ip4_address":    dataSourceIP4Address(),
 		},
