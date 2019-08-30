@@ -27,7 +27,7 @@ func dataSourceIP4Network() *schema.Resource {
 			"result_count": &schema.Schema{
 				Type:     schema.TypeInt,
 				Optional: true,
-				Default:  1,
+				Default:  10,
 			},
 			"hint": &schema.Schema{
 				Type:     schema.TypeString,
@@ -96,7 +96,7 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	options := "hint=" + hint + "|"
 
 	resp, err := client.GetIP4NetworksByHint(containerID, start, count, options)
-	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint: %s"); err != nil {
+	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -169,11 +169,7 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 				}
 				d.Set("inherit_ping_before_assign", b)
 			default:
-				err := fmt.Errorf("Unknown IP4 Network Property: %s", val)
-				if err = bam.LogoutClientIfError(client, err, "Unknown IP4 Network Property"); err != nil {
-					mutex.Unlock()
-					return err
-				}
+				log.Printf("[WARN] Unknown IP4 Address Property: %s", prop)
 			}
 		}
 	}
