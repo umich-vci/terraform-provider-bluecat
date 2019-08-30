@@ -255,7 +255,7 @@ func resourceIP4AddressUpdate(d *schema.ResourceData, meta interface{}) error {
 	otype := d.Get("type").(string)
 	properties := "Requested_by=" + requestedBy + "|Assigned_Date=" + assignedDate + "|Notes=" + notes + "|name=" + name + "|"
 
-	if otype != "STATIC" {
+	if macAddress != "" {
 		properties = properties + "macAddress=" + macAddress + "|"
 	}
 
