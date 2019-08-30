@@ -141,6 +141,8 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 				d.Set("address", val)
 			case "state":
 				d.Set("state", val)
+			case "macAddress":
+				d.Set("mac_address", val)
 			default:
 				log.Printf("[WARN] Unknown IP4 Address Property: %s", prop)
 			}
@@ -209,10 +211,11 @@ func resourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 			case "Notes":
 				d.Set("notes", val)
 			case "address":
-				// since we have to pass in an address to read it we don't really need this
-				// 	d.Set("address", val)
+				d.Set("address", val)
 			case "state":
 				d.Set("state", val)
+			case "macAddress":
+				d.Set("mac_address", val)
 			default:
 				log.Printf("[WARN] Unknown IP4 Address Property: %s", prop)
 			}
@@ -231,6 +234,52 @@ func resourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 }
 
 func resourceIP4AddressUpdate(d *schema.ResourceData, meta interface{}) error {
+	mutex.Lock()
+	client, err := meta.(*Config).Client()
+	if err != nil {
+		mutex.Unlock()
+		return err
+	}
+
+	id, err := strconv.ParseInt(d.Id(), 10, 64)
+	if err = bam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
+		mutex.Unlock()
+		return err
+	}
+
+	macAddress := d.Get("mac_address").(string)
+	requestedBy := d.Get("requested_by").(string)
+	assignedDate := d.Get("assigned_date").(string)
+	notes := d.Get("notes").(string)
+	name := d.Get("name").(string)
+	otype := d.Get("type").(string)
+	properties := "Requested_by=" + requestedBy + "|Assigned_Date=" + assignedDate + "|Notes=" + notes + "|name=" + name + "|"
+
+	if otype != "STATIC" {
+		properties = properties + "macAddress=" + macAddress + "|"
+	}
+
+	update := bam.APIEntity{
+		Id:         &id,
+		Name:       &name,
+		Properties: &properties,
+		Type:       &otype,
+	}
+
+	err = client.Update(&update)
+	if err = bam.LogoutClientIfError(client, err, "IP4 Address Update failed"); err != nil {
+		mutex.Unlock()
+		return err
+	}
+
+	// logout client
+	if err := client.Logout(); err != nil {
+		mutex.Unlock()
+		return err
+	}
+	log.Printf("[INFO] BlueCat Logout was successful")
+	mutex.Unlock()
+
 	return resourceIP4AddressRead(d, meta)
 }
 
