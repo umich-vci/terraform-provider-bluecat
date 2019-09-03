@@ -53,12 +53,14 @@ func dataSourceHostRecord() *schema.Resource {
 				Computed: true,
 			},
 			"addresses": &schema.Schema{
-				Type:     schema.TypeString,
+				Type:     schema.TypeSet,
 				Computed: true,
+				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
 			"address_ids": &schema.Schema{
-				Type:     schema.TypeString,
+				Type:     schema.TypeSet,
 				Computed: true,
+				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
 		},
 	}
@@ -136,9 +138,19 @@ func dataSourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 				}
 				d.Set("reverse_record", b)
 			case "addresses":
-				d.Set("addresses", val)
+				addresses := strings.Split(val, ",")
+				addressesSet := make([]interface{}, len(addresses))
+				for y, address := range addresses {
+					addressesSet[y] = address
+				}
+				d.Set("addresses", addressesSet)
 			case "addressIds":
-				d.Set("address_ids", val)
+				addressIDs := strings.Split(val, ",")
+				addressIDsSet := make([]interface{}, len(addressIDs))
+				for y, addressID := range addressIDs {
+					addressIDsSet[y] = addressID
+				}
+				d.Set("address_ids", addressIDsSet)
 			default:
 				log.Printf("[WARN] Unknown Host Record Property: %s", prop)
 			}
