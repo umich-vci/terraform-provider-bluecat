@@ -1,15 +1,14 @@
 ---
 layout: "bluecat"
 page_title: "BlueCat: bluecat_ip4_network-block-range"
-sidebar_current: "docs-bluecat-datasource-ip4-network"
+sidebar_current: "docs-bluecat-datasource-ip4-network-block-range"
 description: |-
  Gets information about an existing IPv4 network, IPv4 Block, or DHCPv4 Range.
 ---
 
 # bluecat\_ip4\_network-block-range
 
-Use this data source to access the attributes of an IPv4 network.  If the API returns more than one
-IPv4 network that matches the specified hint, an error will be returned.
+Use this data source to access the attributes of an IPv4 network, IPv4 Block, or DHCPv4 Range.
 
 ## Example Usage
 
@@ -21,13 +20,14 @@ data "bluecat_ip4_network-block-range" "network" {
 }
 
 output "bluecat_network_name" {
-    value = data.bluecat_ip4_network.network.name
+    value = data.bluecat_ip4_network-block-range.network.name
 }
 ```
 
 ## Argument Reference
 
-* `container_id` - (Required) The object ID of the container that has the specified IPv4 network.
+* `container_id` - (Required) The object ID of a container that contains the specified IPv4
+  network, block, or range.
 
 * `address` - (Required) IP address to find the IPv4 network, IPv4 Block, or DHCPv4 Range of.
 
@@ -40,7 +40,7 @@ The atributes returned will vary based on the object returned.
 
 * `name` - The name assigned the resource.
 
-* `properties` -  The properties of the resource as returned by the API (pipe delimited).
+* `properties` - The properties of the resource as returned by the API (pipe delimited).
 
 * `type` - The type of the resource.
 
@@ -48,7 +48,7 @@ The atributes returned will vary based on the object returned.
 
 * `allow_duplicate_host` - Duplicate host names check.
 
-* `inherit_allow_duplicate_host` -  Duplicate host names check is inherited.
+* `inherit_allow_duplicate_host` - Duplicate host names check is inherited.
 
 * `ping_before_assign` - The network pings an address before assignment.
 
