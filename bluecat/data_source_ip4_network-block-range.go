@@ -1,7 +1,6 @@
 package bluecat
 
 import (
-	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -19,35 +18,20 @@ func dataSourceIP4Network() *schema.Resource {
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			"start": &schema.Schema{
-				Type:     schema.TypeInt,
-				Optional: true,
-				Default:  0,
+			"type": &schema.Schema{
+				Type:         schema.TypeString,
+				Required:     true,
+				ValidateFunc: validation.StringInSlice([]string{"IP4Block", "IP4Network", "DHCP4Range", ""}, false),
 			},
-			"result_count": &schema.Schema{
-				Type:     schema.TypeInt,
-				Optional: true,
-				Default:  10,
-			},
-			"hint": &schema.Schema{
+			"address": &schema.Schema{
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			"hint_type": &schema.Schema{
-				Type:         schema.TypeString,
-				Required:     true,
-				ValidateFunc: validation.StringInSlice([]string{"name", "cidr"}, false),
-			},
-
 			"name": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
 			},
 			"properties": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"type": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
 			},
@@ -71,6 +55,30 @@ func dataSourceIP4Network() *schema.Resource {
 				Type:     schema.TypeBool,
 				Computed: true,
 			},
+			"reference": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"gateway": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"inherit_default_domains": &schema.Schema{
+				Type:     schema.TypeBool,
+				Computed: true,
+			},
+			"default_view": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"inherit_default_view": &schema.Schema{
+				Type:     schema.TypeBool,
+				Computed: true,
+			},
+			"inherit_dns_restrictions": &schema.Schema{
+				Type:     schema.TypeBool,
+				Computed: true,
+			},
 		},
 	}
 }
@@ -88,60 +96,21 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 		mutex.Unlock()
 		return err
 	}
-	start := d.Get("start").(int)
-	count := d.Get("result_count").(int)
-	hint := d.Get("hint").(string)
-	hintType := d.Get("hint_type").(string)
+	otype := d.Get("type").(string)
+	address := d.Get("address").(string)
 
-	options := "hint=" + hint + "|"
-
-	resp, err := client.GetIP4NetworksByHint(containerID, start, count, options)
+	resp, err := client.GetIPRangedByIP(containerID, otype, address)
 	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint"); err != nil {
 		mutex.Unlock()
 		return err
 	}
 
-	log.Printf("[INFO] GetIP4NetworksByHint returned %s results", strconv.Itoa(len(resp.Item)))
+	d.SetId(strconv.FormatInt(*resp.Id, 10))
+	d.Set("name", *resp.Name)
+	d.Set("properties", *resp.Properties)
+	d.Set("type", resp.Type)
 
-	matches := 0
-	matchLocation := -1
-	for x := range resp.Item {
-		if hintType == "name" {
-			if *resp.Item[x].Name == hint {
-				matches++
-				matchLocation = x
-			}
-		} else if hintType == "cidr" {
-			properties := *resp.Item[x].Properties
-			props := strings.Split(properties, "|")
-			for y := range props {
-				if len(props[y]) > 0 {
-					prop := strings.Split(props[y], "=")[0]
-					val := strings.Split(props[y], "=")[1]
-					if prop == "CIDR" && strings.Split(val, "/")[0] == hint {
-						log.Printf("[INFO] CIDR found is %s", val)
-						matches++
-						matchLocation = x
-					}
-				}
-			}
-		}
-	}
-
-	if matches == 0 || matches > 1 {
-		err := fmt.Errorf("No exact IP4 network match found for: %s", hint)
-		if err = bam.LogoutClientIfError(client, err, "No exact IP4 network match found for hint"); err != nil {
-			mutex.Unlock()
-			return err
-		}
-	}
-
-	d.SetId(strconv.FormatInt(*resp.Item[matchLocation].Id, 10))
-	d.Set("name", *resp.Item[matchLocation].Name)
-	d.Set("properties", *resp.Item[matchLocation].Properties)
-	d.Set("type", resp.Item[matchLocation].Type)
-
-	props := strings.Split(*resp.Item[matchLocation].Properties, "|")
+	props := strings.Split(*resp.Properties, "|")
 	for x := range props {
 		if len(props[x]) > 0 {
 			prop := strings.Split(props[x], "=")[0]
@@ -168,6 +137,33 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 					return err
 				}
 				d.Set("inherit_ping_before_assign", b)
+			case "reference":
+				d.Set("reference", val)
+			case "gateway":
+				d.Set("gateway", val)
+			case "inheritDefaultDomains":
+				b, err := strconv.ParseBool(val)
+				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritDefaultDomains to bool"); err != nil {
+					mutex.Unlock()
+					return err
+				}
+				d.Set("inherit_default_domains", b)
+			case "defaultView":
+				d.Set("default_view", val)
+			case "inheritDefaultView":
+				b, err := strconv.ParseBool(val)
+				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritDefaultView to bool"); err != nil {
+					mutex.Unlock()
+					return err
+				}
+				d.Set("inherit_default_view", b)
+			case "inheritDNSRestrictions":
+				b, err := strconv.ParseBool(val)
+				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritDNSRestrictions to bool"); err != nil {
+					mutex.Unlock()
+					return err
+				}
+				d.Set("inherit_dns_restrictions", b)
 			default:
 				log.Printf("[WARN] Unknown IP4 Address Property: %s", prop)
 			}
