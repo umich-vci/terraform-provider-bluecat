@@ -65,3 +65,7 @@ The atributes returned will vary based on the object returned.
 * `inherit_default_view` - The default DNS Viewis inherited.
 
 * `inherit_dns_restrictions` - DNS restrictions are inherited.
+
+* `addresses_in_use` - The number of addresses allocated/in use on the network.
+
+* `addresses_free` - The number of addresses unallocated/free on the network.
