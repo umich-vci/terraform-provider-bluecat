@@ -2,6 +2,7 @@ package bluecat
 
 import (
 	"log"
+	"math"
 	"strconv"
 	"strings"
 
@@ -86,6 +87,14 @@ func resourceIP4Network() *schema.Resource {
 			},
 			"inherit_dns_restrictions": &schema.Schema{
 				Type:     schema.TypeBool,
+				Computed: true,
+			},
+			"addresses_in_use": &schema.Schema{
+				Type:     schema.TypeInt,
+				Computed: true,
+			},
+			"addresses_free": &schema.Schema{
+				Type:     schema.TypeInt,
 				Computed: true,
 			},
 		},
@@ -177,6 +186,24 @@ func resourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 
 			switch prop {
 			case "CIDR":
+				netmask, err := strconv.ParseFloat(strings.Split(val, "/")[1], 64)
+				if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Network netmask"); err != nil {
+					mutex.Unlock()
+					return err
+				}
+				addressCount := int(math.Pow(2, (32 - netmask)))
+
+				resp, err := client.GetEntities(*resp.Id, "IP4Address", 0, addressCount)
+				if err = bam.LogoutClientIfError(client, err, "Failed to get child IP4 Addresses"); err != nil {
+					mutex.Unlock()
+					return err
+				}
+
+				addressesInUse := len(resp.Item)
+				addressesFree := addressCount - addressesInUse
+
+				d.Set("addresses_in_use", addressesInUse)
+				d.Set("addresses_free", addressesFree)
 				d.Set("cidr", val)
 			case "allowDuplicateHost":
 				d.Set("allow_duplicate_host", val)
