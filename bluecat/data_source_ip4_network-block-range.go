@@ -57,10 +57,6 @@ func dataSourceIP4Network() *schema.Resource {
 				Type:     schema.TypeBool,
 				Computed: true,
 			},
-			"reference": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
-			},
 			"gateway": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
@@ -134,7 +130,6 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("allow_duplicate_host", networkProperties.allowDuplicateHost)
 	d.Set("inherit_allow_duplicate_host", networkProperties.inheritAllowDuplicateHost)
 	d.Set("inherit_ping_before_assign", networkProperties.inheritPingBeforeAssign)
-	d.Set("reference", networkProperties.reference)
 	d.Set("ping_before_assign", networkProperties.pingBeforeAssign)
 	d.Set("gateway", networkProperties.gateway)
 	d.Set("inherit_default_domains", networkProperties.inheritDefaultDomains)
@@ -169,7 +164,6 @@ type ip4NetworkProperties struct {
 	inheritAllowDuplicateHost bool
 	pingBeforeAssign          string
 	inheritPingBeforeAssign   bool
-	reference                 string
 	gateway                   string
 	inheritDefaultDomains     bool
 	defaultView               string
@@ -207,8 +201,6 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, error) 
 					return networkProperties, fmt.Errorf("Error parsing inheritPingBeforeAssign to bool")
 				}
 				networkProperties.inheritPingBeforeAssign = b
-			case "reference":
-				networkProperties.reference = val
 			case "gateway":
 				networkProperties.gateway = val
 			case "inheritDefaultDomains":
