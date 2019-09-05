@@ -175,6 +175,7 @@ type ip4NetworkProperties struct {
 
 func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, error) {
 	var networkProperties ip4NetworkProperties
+	networkProperties.customProperties = make(map[string]string)
 
 	props := strings.Split(properties, "|")
 	for x := range props {

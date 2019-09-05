@@ -164,6 +164,7 @@ type hostRecordProperties struct {
 
 func parseHostRecordProperties(properties string) (hostRecordProperties, error) {
 	var hrProperties hostRecordProperties
+	hrProperties.customProperties = make(map[string]string)
 
 	// if ttl isn't returned as a property it will remain set at -1
 	hrProperties.ttl = -1

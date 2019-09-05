@@ -101,6 +101,7 @@ type ip4AddressProperties struct {
 
 func parseIP4AddressProperties(properties string) ip4AddressProperties {
 	var ip4Properties ip4AddressProperties
+	ip4Properties.customProperties = make(map[string]string)
 
 	props := strings.Split(properties, "|")
 	for x := range props {
