@@ -66,6 +66,10 @@ func dataSourceHostRecord() *schema.Resource {
 				Type:     schema.TypeMap,
 				Computed: true,
 			},
+			"ttl": &schema.Schema{
+				Type:     schema.TypeInt,
+				Computed: true,
+			},
 		},
 	}
 }
@@ -134,6 +138,7 @@ func dataSourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("addresses", hostRecordProperties.addresses)
 	d.Set("address_ids", hostRecordProperties.addressIDs)
 	d.Set("custom_properties", hostRecordProperties.customProperties)
+	d.Set("ttl", hostRecordProperties.ttl)
 
 	// logout client
 	if err := client.Logout(); err != nil {
@@ -150,6 +155,7 @@ type hostRecordProperties struct {
 	absoluteName     string
 	parentID         string
 	parentType       string
+	ttl              int
 	reverseRecord    bool
 	addresses        []string
 	addressIDs       []string
@@ -158,6 +164,9 @@ type hostRecordProperties struct {
 
 func parseHostRecordProperties(properties string) (hostRecordProperties, error) {
 	var hrProperties hostRecordProperties
+
+	// if ttl isn't returned as a property it will remain set at -1
+	hrProperties.ttl = -1
 
 	props := strings.Split(properties, "|")
 	for x := range props {
@@ -188,6 +197,12 @@ func parseHostRecordProperties(properties string) (hostRecordProperties, error) 
 				for i := range addressIDs {
 					hrProperties.addressIDs = append(hrProperties.addressIDs, addressIDs[i])
 				}
+			case "ttl":
+				ttlval, err := strconv.Atoi(val)
+				if err != nil {
+					return hrProperties, fmt.Errorf("Error parsing ttl to int")
+				}
+				hrProperties.ttl = ttlval
 			default:
 				hrProperties.customProperties[prop] = val
 			}
