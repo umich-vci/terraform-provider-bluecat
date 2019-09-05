@@ -144,6 +144,11 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("custom_properties", networkProperties.customProperties)
 
 	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.cidr, client)
+	if err = bam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
+		mutex.Unlock()
+		return err
+	}
+
 	d.Set("addresses_in_use", addressesInUse)
 	d.Set("addresses_free", addressesFree)
 
