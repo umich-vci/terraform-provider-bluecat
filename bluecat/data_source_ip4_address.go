@@ -33,24 +33,16 @@ func dataSourceIP4Address() *schema.Resource {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"assigned_date": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"requested_by": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"notes": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
-			},
 			"state": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
 			},
 			"mac_address": &schema.Schema{
 				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"custom_properties": &schema.Schema{
+				Type:     schema.TypeMap,
 				Computed: true,
 			},
 		},
@@ -83,31 +75,11 @@ func dataSourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("properties", resp.Properties)
 	d.Set("type", resp.Type)
 
-	props := strings.Split(*resp.Properties, "|")
-	for x := range props {
-		if len(props[x]) > 0 {
-			prop := strings.Split(props[x], "=")[0]
-			val := strings.Split(props[x], "=")[1]
-
-			switch prop {
-			case "Assigned_Date":
-				d.Set("assigned_date", val)
-			case "Requested_by":
-				d.Set("requested_by", val)
-			case "Notes":
-				d.Set("notes", val)
-			case "address":
-				// since we have to pass in an address to read it we don't really need this
-				// 	d.Set("address", val)
-			case "state":
-				d.Set("state", val)
-			case "macAddress":
-				d.Set("mac_address", val)
-			default:
-				log.Printf("[WARN]Unknown IP4 Address Property: %s", prop)
-			}
-		}
-	}
+	addressProperties := parseIP4AddressProperties(*resp.Properties)
+	d.Set("address", addressProperties.address)
+	d.Set("state", addressProperties.state)
+	d.Set("mac_address", addressProperties.macAddress)
+	d.Set("custom_properties", addressProperties.customProperties)
 
 	// logout client
 	if err := client.Logout(); err != nil {
@@ -118,4 +90,36 @@ func dataSourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 	mutex.Unlock()
 
 	return nil
+}
+
+type ip4AddressProperties struct {
+	address          string
+	state            string
+	macAddress       string
+	customProperties map[string]string
+}
+
+func parseIP4AddressProperties(properties string) ip4AddressProperties {
+	var ip4Properties ip4AddressProperties
+
+	props := strings.Split(properties, "|")
+	for x := range props {
+		if len(props[x]) > 0 {
+			prop := strings.Split(props[x], "=")[0]
+			val := strings.Split(props[x], "=")[1]
+
+			switch prop {
+			case "address":
+				ip4Properties.address = val
+			case "state":
+				ip4Properties.state = val
+			case "macAddress":
+				ip4Properties.macAddress = val
+			default:
+				ip4Properties.customProperties[prop] = val
+			}
+		}
+	}
+
+	return ip4Properties
 }

@@ -1,6 +1,7 @@
 package bluecat
 
 import (
+	"fmt"
 	"log"
 	"math"
 	"strconv"
@@ -88,6 +89,10 @@ func dataSourceIP4Network() *schema.Resource {
 				Type:     schema.TypeInt,
 				Computed: true,
 			},
+			"custom_properties": &schema.Schema{
+				Type:     schema.TypeMap,
+				Computed: true,
+			},
 		},
 	}
 }
@@ -114,92 +119,33 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 
-	id := *resp.Id
-	name := *resp.Name
-	otype = *resp.Type
-	properties := *resp.Properties
-	d.SetId(strconv.FormatInt(id, 10))
-	d.Set("name", name)
-	d.Set("properties", properties)
-	d.Set("type", otype)
+	d.SetId(strconv.FormatInt(*resp.Id, 10))
+	d.Set("name", *resp.Name)
+	d.Set("properties", *resp.Properties)
+	d.Set("type", *resp.Type)
 
-	props := strings.Split(properties, "|")
-	for x := range props {
-		if len(props[x]) > 0 {
-			prop := strings.Split(props[x], "=")[0]
-			val := strings.Split(props[x], "=")[1]
-
-			switch prop {
-			case "CIDR":
-				netmask, err := strconv.ParseFloat(strings.Split(val, "/")[1], 64)
-				if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Network netmask"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				addressCount := int(math.Pow(2, (32 - netmask)))
-
-				resp, err := client.GetEntities(*resp.Id, "IP4Address", 0, addressCount)
-				if err = bam.LogoutClientIfError(client, err, "Failed to get child IP4 Addresses"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-
-				addressesInUse := len(resp.Item)
-				addressesFree := addressCount - addressesInUse
-
-				d.Set("addresses_in_use", addressesInUse)
-				d.Set("addresses_free", addressesFree)
-				d.Set("cidr", val)
-			case "allowDuplicateHost":
-				d.Set("allow_duplicate_host", val)
-			case "inheritAllowDuplicateHost":
-				b, err := strconv.ParseBool(val)
-				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritAllowDuplicateHost to bool"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				d.Set("inherit_allow_duplicate_host", b)
-			case "pingBeforeAssign":
-				d.Set("ping_before_assign", val)
-			case "inheritPingBeforeAssign":
-				b, err := strconv.ParseBool(val)
-				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritPingBeforeAssign to bool"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				d.Set("inherit_ping_before_assign", b)
-			case "reference":
-				d.Set("reference", val)
-			case "gateway":
-				d.Set("gateway", val)
-			case "inheritDefaultDomains":
-				b, err := strconv.ParseBool(val)
-				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritDefaultDomains to bool"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				d.Set("inherit_default_domains", b)
-			case "defaultView":
-				d.Set("default_view", val)
-			case "inheritDefaultView":
-				b, err := strconv.ParseBool(val)
-				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritDefaultView to bool"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				d.Set("inherit_default_view", b)
-			case "inheritDNSRestrictions":
-				b, err := strconv.ParseBool(val)
-				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritDNSRestrictions to bool"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				d.Set("inherit_dns_restrictions", b)
-			default:
-				log.Printf("[WARN] Unknown IP4 Address Property: %s", prop)
-			}
-		}
+	networkProperties, err := parseIP4NetworkProperties(*resp.Properties)
+	if err = bam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
+		mutex.Unlock()
+		return err
 	}
+
+	d.Set("cidr", networkProperties.cidr)
+	d.Set("allow_duplicate_host", networkProperties.allowDuplicateHost)
+	d.Set("inherit_allow_duplicate_host", networkProperties.inheritAllowDuplicateHost)
+	d.Set("inherit_ping_before_assign", networkProperties.inheritPingBeforeAssign)
+	d.Set("reference", networkProperties.reference)
+	d.Set("ping_before_assign", networkProperties.pingBeforeAssign)
+	d.Set("gateway", networkProperties.gateway)
+	d.Set("inherit_default_domains", networkProperties.inheritDefaultDomains)
+	d.Set("default_view", networkProperties.defaultView)
+	d.Set("inherit_default_view", networkProperties.inheritDefaultView)
+	d.Set("inherit_dns_restrictions", networkProperties.inheritDNSRestrictions)
+	d.Set("custom_properties", networkProperties.customProperties)
+
+	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.cidr, client)
+	d.Set("addresses_in_use", addressesInUse)
+	d.Set("addresses_free", addressesFree)
 
 	// logout client
 	if err := client.Logout(); err != nil {
@@ -210,4 +156,100 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	mutex.Unlock()
 
 	return nil
+}
+
+type ip4NetworkProperties struct {
+	cidr                      string
+	allowDuplicateHost        string
+	inheritAllowDuplicateHost bool
+	pingBeforeAssign          string
+	inheritPingBeforeAssign   bool
+	reference                 string
+	gateway                   string
+	inheritDefaultDomains     bool
+	defaultView               string
+	inheritDefaultView        bool
+	inheritDNSRestrictions    bool
+	customProperties          map[string]string
+}
+
+func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, error) {
+	var networkProperties ip4NetworkProperties
+
+	props := strings.Split(properties, "|")
+	for x := range props {
+		if len(props[x]) > 0 {
+			prop := strings.Split(props[x], "=")[0]
+			val := strings.Split(props[x], "=")[1]
+
+			switch prop {
+			case "CIDR":
+				networkProperties.cidr = val
+			case "allowDuplicateHost":
+				networkProperties.allowDuplicateHost = val
+			case "inheritAllowDuplicateHost":
+				b, err := strconv.ParseBool(val)
+				if err != nil {
+					return networkProperties, fmt.Errorf("Error parsing inheritAllowDuplicateHost to bool")
+				}
+				networkProperties.inheritAllowDuplicateHost = b
+			case "pingBeforeAssign":
+				networkProperties.pingBeforeAssign = val
+			case "inheritPingBeforeAssign":
+				b, err := strconv.ParseBool(val)
+				if err != nil {
+					return networkProperties, fmt.Errorf("Error parsing inheritPingBeforeAssign to bool")
+				}
+				networkProperties.inheritPingBeforeAssign = b
+			case "reference":
+				networkProperties.reference = val
+			case "gateway":
+				networkProperties.gateway = val
+			case "inheritDefaultDomains":
+				b, err := strconv.ParseBool(val)
+				if err != nil {
+					return networkProperties, fmt.Errorf("Error parsing inheritDefaultDomains to bool")
+				}
+				networkProperties.inheritDefaultDomains = b
+			case "defaultView":
+				networkProperties.defaultView = val
+			case "inheritDefaultView":
+				b, err := strconv.ParseBool(val)
+				if err != nil {
+					return networkProperties, fmt.Errorf("Error parsing inheritDefaultView to bool")
+				}
+				networkProperties.inheritDefaultView = b
+			case "inheritDNSRestrictions":
+				b, err := strconv.ParseBool(val)
+				if err != nil {
+					return networkProperties, fmt.Errorf("Error parsing inheritDNSRestrictions to bool")
+				}
+				networkProperties.inheritDNSRestrictions = b
+			default:
+				networkProperties.customProperties[prop] = val
+			}
+		}
+	}
+
+	return networkProperties, nil
+}
+
+func getIP4NetworkAddressUsage(id int64, cidr string, client bam.ProteusAPI) (int, int, error) {
+
+	netmask, err := strconv.ParseFloat(strings.Split(cidr, "/")[1], 64)
+	if err != nil {
+		mutex.Unlock()
+		return 0, 0, fmt.Errorf("Error parsing netmask from cidr string")
+	}
+	addressCount := int(math.Pow(2, (32 - netmask)))
+
+	resp, err := client.GetEntities(id, "IP4Address", 0, addressCount)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	addressesInUse := len(resp.Item)
+	addressesFree := addressCount - addressesInUse
+
+	return addressesInUse, addressesFree, nil
 }

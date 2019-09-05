@@ -62,6 +62,10 @@ func dataSourceHostRecord() *schema.Resource {
 				Computed: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
+			"custom_properties": &schema.Schema{
+				Type:     schema.TypeMap,
+				Computed: true,
+			},
 		},
 	}
 }
@@ -117,45 +121,19 @@ func dataSourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("properties", *resp.Item[matchLocation].Properties)
 	d.Set("type", resp.Item[matchLocation].Type)
 
-	props := strings.Split(*resp.Item[matchLocation].Properties, "|")
-	for x := range props {
-		if len(props[x]) > 0 {
-			prop := strings.Split(props[x], "=")[0]
-			val := strings.Split(props[x], "=")[1]
-
-			switch prop {
-			case "absoluteName":
-				d.Set("absolute_name", val)
-			case "parentId":
-				d.Set("parent_id", val)
-			case "parentType":
-				d.Set("parent_type", val)
-			case "reverseRecord":
-				b, err := strconv.ParseBool(val)
-				if err = bam.LogoutClientIfError(client, err, "Unable to parse reverseRecord to bool"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				d.Set("reverse_record", b)
-			case "addresses":
-				addresses := strings.Split(val, ",")
-				addressesSet := make([]interface{}, len(addresses))
-				for y, address := range addresses {
-					addressesSet[y] = address
-				}
-				d.Set("addresses", addressesSet)
-			case "addressIds":
-				addressIDs := strings.Split(val, ",")
-				addressIDsSet := make([]interface{}, len(addressIDs))
-				for y, addressID := range addressIDs {
-					addressIDsSet[y] = addressID
-				}
-				d.Set("address_ids", addressIDsSet)
-			default:
-				log.Printf("[WARN] Unknown Host Record Property: %s", prop)
-			}
-		}
+	hostRecordProperties, err := parseHostRecordProperties(*resp.Item[matchLocation].Properties)
+	if err = bam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
+		mutex.Unlock()
+		return err
 	}
+
+	d.Set("absolute_name", hostRecordProperties.absoluteName)
+	d.Set("parent_id", hostRecordProperties.parentID)
+	d.Set("parent_type", hostRecordProperties.parentType)
+	d.Set("reverse_record", hostRecordProperties.reverseRecord)
+	d.Set("addresses", hostRecordProperties.addresses)
+	d.Set("address_ids", hostRecordProperties.addressIDs)
+	d.Set("custom_properties", hostRecordProperties.customProperties)
 
 	// logout client
 	if err := client.Logout(); err != nil {
@@ -166,4 +144,55 @@ func dataSourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	mutex.Unlock()
 
 	return nil
+}
+
+type hostRecordProperties struct {
+	absoluteName     string
+	parentID         string
+	parentType       string
+	reverseRecord    bool
+	addresses        []string
+	addressIDs       []string
+	customProperties map[string]string
+}
+
+func parseHostRecordProperties(properties string) (hostRecordProperties, error) {
+	var hrProperties hostRecordProperties
+
+	props := strings.Split(properties, "|")
+	for x := range props {
+		if len(props[x]) > 0 {
+			prop := strings.Split(props[x], "=")[0]
+			val := strings.Split(props[x], "=")[1]
+
+			switch prop {
+			case "absoluteName":
+				hrProperties.absoluteName = val
+			case "parentId":
+				hrProperties.parentID = val
+			case "parentType":
+				hrProperties.parentType = val
+			case "reverseRecord":
+				b, err := strconv.ParseBool(val)
+				if err != nil {
+					return hrProperties, fmt.Errorf("Error parsing reverseRecord to bool")
+				}
+				hrProperties.reverseRecord = b
+			case "addresses":
+				addresses := strings.Split(val, ",")
+				for i := range addresses {
+					hrProperties.addresses = append(hrProperties.addresses, addresses[i])
+				}
+			case "addressIds":
+				addressIDs := strings.Split(val, ",")
+				for i := range addressIDs {
+					hrProperties.addressIDs = append(hrProperties.addressIDs, addressIDs[i])
+				}
+			default:
+				hrProperties.customProperties[prop] = val
+			}
+		}
+	}
+
+	return hrProperties, nil
 }
