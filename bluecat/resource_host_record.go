@@ -62,6 +62,10 @@ func resourceHostRecord() *schema.Resource {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
+			"custom_properties": &schema.Schema{
+				Type:     schema.TypeMap,
+				Optional: true,
+			},
 		},
 	}
 }
@@ -89,6 +93,12 @@ func resourceHostRecordCreate(d *schema.ResourceData, meta interface{}) error {
 	reverseRecord := strconv.FormatBool(d.Get("reverse_record").(bool))
 	comments := d.Get("comments").(string)
 	properties := "reverseRecord=" + reverseRecord + "|comments=" + comments + "|"
+
+	if customProperties, ok := d.GetOk("custom_properties"); ok {
+		for k, v := range customProperties.(map[string]string) {
+			properties = properties + k + "=" + v + "|"
+		}
+	}
 
 	resp, err := client.AddHostRecord(viewID, absoluteName, strings.Join(addresses, ","), ttl, properties)
 	if err = bam.LogoutClientIfError(client, err, "AddHostRecord failed"); err != nil {
@@ -145,44 +155,17 @@ func resourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("properties", resp.Properties)
 	d.Set("type", resp.Type)
 
-	// if ttl isn't returned as a property it will remain set at -1
-	d.Set("ttl", -1)
-
-	props := strings.Split(*resp.Properties, "|")
-	for x := range props {
-		if len(props[x]) > 0 {
-			prop := strings.Split(props[x], "=")[0]
-			val := strings.Split(props[x], "=")[1]
-
-			switch prop {
-			case "absoluteName":
-				d.Set("absolute_name", val)
-			case "reverseRecord":
-				b, err := strconv.ParseBool(val)
-				if err = bam.LogoutClientIfError(client, err, "Unable to parse reverseRecord to bool"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				d.Set("reverse_record", b)
-			case "addresses":
-				addresses := strings.Split(val, ",")
-				addressesSet := make([]interface{}, len(addresses))
-				for y, address := range addresses {
-					addressesSet[y] = address
-				}
-				d.Set("addresses", addressesSet)
-			case "ttl":
-				i, err := strconv.Atoi(val)
-				if err = bam.LogoutClientIfError(client, err, "Unable to parse ttl to int"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				d.Set("ttl", i)
-			default:
-				log.Printf("[WARN] Unknown Host Record Property: %s", prop)
-			}
-		}
+	hostRecordProperties, err := parseHostRecordProperties(*resp.Properties)
+	if err = bam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
+		mutex.Unlock()
+		return err
 	}
+
+	d.Set("absolute_name", hostRecordProperties.absoluteName)
+	d.Set("reverse_record", hostRecordProperties.reverseRecord)
+	d.Set("addresses", hostRecordProperties.addresses)
+	d.Set("ttl", hostRecordProperties.ttl)
+	d.Set("custom_properties", hostRecordProperties.customProperties)
 
 	// logout client
 	if err := client.Logout(); err != nil {
@@ -219,6 +202,12 @@ func resourceHostRecordUpdate(d *schema.ResourceData, meta interface{}) error {
 	reverseRecord := strconv.FormatBool(d.Get("reverse_record").(bool))
 	comments := d.Get("comments").(string)
 	properties := "reverseRecord=" + reverseRecord + "|comments=" + comments + "|ttl=" + ttl + "|addresses=" + strings.Join(addresses, ",") + "|"
+
+	if customProperties, ok := d.GetOk("custom_properties"); ok {
+		for k, v := range customProperties.(map[string]string) {
+			properties = properties + k + "=" + v + "|"
+		}
+	}
 
 	update := bam.APIEntity{
 		Id:         &id,
