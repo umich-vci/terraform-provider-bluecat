@@ -74,6 +74,10 @@ func resourceIP4Address() *schema.Resource {
 				Type:     schema.TypeMap,
 				Optional: true,
 			},
+			"computed_parent_id": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
 		},
 	}
 }
@@ -183,8 +187,7 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	d.SetId(strconv.FormatInt(*resp.Id, 10))
-	//need to set parent ID here in case we selected one from parent_id_list
-	d.Set("parent_id", parentIDString)
+	d.Set("computed_parent_id", parentIDString)
 
 	// logout client
 	if err := client.Logout(); err != nil {
