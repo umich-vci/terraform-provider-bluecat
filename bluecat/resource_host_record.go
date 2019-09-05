@@ -95,8 +95,8 @@ func resourceHostRecordCreate(d *schema.ResourceData, meta interface{}) error {
 	properties := "reverseRecord=" + reverseRecord + "|comments=" + comments + "|"
 
 	if customProperties, ok := d.GetOk("custom_properties"); ok {
-		for k, v := range customProperties.(map[string]string) {
-			properties = properties + k + "=" + v + "|"
+		for k, v := range customProperties.(map[string]interface{}) {
+			properties = properties + k + "=" + v.(string) + "|"
 		}
 	}
 
