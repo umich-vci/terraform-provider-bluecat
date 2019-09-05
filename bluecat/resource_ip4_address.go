@@ -1,7 +1,6 @@
 package bluecat
 
 import (
-	"fmt"
 	"log"
 	"strconv"
 
@@ -96,6 +95,13 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 	parentIDString := ""
 	if pid, ok := d.GetOk("parent_id"); ok {
 		parentIDString = pid.(string)
+
+		if _, ok := d.GetOk("parent_id_list"); ok {
+			err := bam.LogoutClientWithError(client, "Cannot specify both parent_id and parent_id_list")
+			mutex.Unlock()
+			return err
+		}
+
 	} else {
 		if pidList, ok := d.GetOk("parent_id_list"); ok {
 			list := pidList.(*schema.Set).List()
@@ -140,20 +146,16 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 			}
 
 			if freeCount == 0 {
-				err := fmt.Errorf("No networks had a free address")
-				if err = bam.LogoutClientIfError(client, err, "AssignNextAvailableIP4Address failed"); err != nil {
-					mutex.Unlock()
-					return err
-				}
+				err := bam.LogoutClientWithError(client, "No networks had a free address")
+				mutex.Unlock()
+				return err
 			}
 
 			parentIDString = parentIDMostFree
 		} else {
-			err := fmt.Errorf("one of parent_id or parent_id_list must be specified")
-			if err = bam.LogoutClientIfError(client, err, "AssignNextAvailableIP4Address failed"); err != nil {
-				mutex.Unlock()
-				return err
-			}
+			err := bam.LogoutClientWithError(client, "One of parent_id or parent_id_list must be specified")
+			mutex.Unlock()
+			return err
 		}
 	}
 
