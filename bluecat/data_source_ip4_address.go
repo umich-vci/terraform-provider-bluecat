@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/umich-vci/golang-bluecat"
+	"github.com/umich-vci/gobam"
 )
 
 func dataSourceIP4Address() *schema.Resource {
@@ -58,14 +58,14 @@ func dataSourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	containerID, err := strconv.ParseInt(d.Get("container_id").(string), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert container_id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert container_id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
 	address := d.Get("address").(string)
 
 	resp, err := client.GetIP4Address(containerID, address)
-	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Address"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Address"); err != nil {
 		mutex.Unlock()
 		return err
 	}

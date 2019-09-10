@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/umich-vci/golang-bluecat"
+	"github.com/umich-vci/gobam"
 )
 
 func resourceHostRecord() *schema.Resource {
@@ -79,7 +79,7 @@ func resourceHostRecordCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	viewID, err := strconv.ParseInt(d.Get("view_id").(string), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert view_id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert view_id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -101,7 +101,7 @@ func resourceHostRecordCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	resp, err := client.AddHostRecord(viewID, absoluteName, strings.Join(addresses, ","), ttl, properties)
-	if err = bam.LogoutClientIfError(client, err, "AddHostRecord failed"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "AddHostRecord failed"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -128,13 +128,13 @@ func resourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
 
 	resp, err := client.GetEntityById(id)
-	if err = bam.LogoutClientIfError(client, err, "Failed to get host record by Id"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Failed to get host record by Id"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -156,7 +156,7 @@ func resourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("type", resp.Type)
 
 	hostRecordProperties, err := parseHostRecordProperties(*resp.Properties)
-	if err = bam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -187,7 +187,7 @@ func resourceHostRecordUpdate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -209,7 +209,7 @@ func resourceHostRecordUpdate(d *schema.ResourceData, meta interface{}) error {
 		}
 	}
 
-	update := bam.APIEntity{
+	update := gobam.APIEntity{
 		Id:         &id,
 		Name:       &name,
 		Properties: &properties,
@@ -217,7 +217,7 @@ func resourceHostRecordUpdate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	err = client.Update(&update)
-	if err = bam.LogoutClientIfError(client, err, "Host Record Update failed"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Host Record Update failed"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -242,13 +242,13 @@ func resourceHostRecordDelete(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
 
 	resp, err := client.GetEntityById(id)
-	if err = bam.LogoutClientIfError(client, err, "Failed to get host record by Id"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Failed to get host record by Id"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -264,7 +264,7 @@ func resourceHostRecordDelete(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	err = client.Delete(id)
-	if err = bam.LogoutClientIfError(client, err, "Delete failed"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Delete failed"); err != nil {
 		mutex.Unlock()
 		return err
 	}

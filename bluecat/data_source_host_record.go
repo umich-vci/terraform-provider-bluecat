@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/umich-vci/golang-bluecat"
+	"github.com/umich-vci/gobam"
 )
 
 func dataSourceHostRecord() *schema.Resource {
@@ -88,7 +88,7 @@ func dataSourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	options := "hint=^" + absoluteName + "$|"
 
 	resp, err := client.GetHostRecordsByHint(start, count, options)
-	if err = bam.LogoutClientIfError(client, err, "Failed to get Host Records by hint"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Failed to get Host Records by hint"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -114,7 +114,7 @@ func dataSourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 
 	if matches == 0 || matches > 1 {
 		err := fmt.Errorf("No exact host record match found for: %s", absoluteName)
-		if err = bam.LogoutClientIfError(client, err, "No exact host record match found for hint"); err != nil {
+		if err = gobam.LogoutClientIfError(client, err, "No exact host record match found for hint"); err != nil {
 			mutex.Unlock()
 			return err
 		}
@@ -126,7 +126,7 @@ func dataSourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("type", resp.Item[matchLocation].Type)
 
 	hostRecordProperties, err := parseHostRecordProperties(*resp.Item[matchLocation].Properties)
-	if err = bam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
 		mutex.Unlock()
 		return err
 	}

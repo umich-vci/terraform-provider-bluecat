@@ -9,7 +9,7 @@ import (
 
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/helper/validation"
-	"github.com/umich-vci/golang-bluecat"
+	"github.com/umich-vci/gobam"
 )
 
 func dataSourceIP4Network() *schema.Resource {
@@ -102,7 +102,7 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	containerID, err := strconv.ParseInt(d.Get("container_id").(string), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert container_id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert container_id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -110,7 +110,7 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	address := d.Get("address").(string)
 
 	resp, err := client.GetIPRangedByIP(containerID, otype, address)
-	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -121,7 +121,7 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("type", *resp.Type)
 
 	networkProperties, err := parseIP4NetworkProperties(*resp.Properties)
-	if err = bam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -139,7 +139,7 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("custom_properties", networkProperties.customProperties)
 
 	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.cidr, client)
-	if err = bam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -232,7 +232,7 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, error) 
 	return networkProperties, nil
 }
 
-func getIP4NetworkAddressUsage(id int64, cidr string, client bam.ProteusAPI) (int, int, error) {
+func getIP4NetworkAddressUsage(id int64, cidr string, client gobam.ProteusAPI) (int, int, error) {
 
 	netmask, err := strconv.ParseFloat(strings.Split(cidr, "/")[1], 64)
 	if err != nil {

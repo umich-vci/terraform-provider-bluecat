@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/umich-vci/golang-bluecat"
+	"github.com/umich-vci/gobam"
 )
 
 func resourceIP4Network() *schema.Resource {
@@ -109,7 +109,7 @@ func resourceIP4NetworkCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	parentID, err := strconv.ParseInt(d.Get("parent_id").(string), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -118,7 +118,7 @@ func resourceIP4NetworkCreate(d *schema.ResourceData, meta interface{}) error {
 	autoCreate := true //we always want to create since this is a resource after all
 
 	resp, err := client.GetNextAvailableIP4Network(parentID, size, isLargerAllowed, autoCreate)
-	if err = bam.LogoutClientIfError(client, err, "Failed on GetNextAvailableIP4Network"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Failed on GetNextAvailableIP4Network"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -130,7 +130,7 @@ func resourceIP4NetworkCreate(d *schema.ResourceData, meta interface{}) error {
 	properties := ""
 	otype := "IP4Network"
 
-	setName := bam.APIEntity{
+	setName := gobam.APIEntity{
 		Id:         &id,
 		Name:       &name,
 		Properties: &properties,
@@ -138,7 +138,7 @@ func resourceIP4NetworkCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	client.Update(&setName)
-	if err = bam.LogoutClientIfError(client, err, "IP4 Network Update failed"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "IP4 Network Update failed"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -163,13 +163,13 @@ func resourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
 
 	resp, err := client.GetEntityById(id)
-	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Address by Id"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Address by Id"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -187,14 +187,14 @@ func resourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 			switch prop {
 			case "CIDR":
 				netmask, err := strconv.ParseFloat(strings.Split(val, "/")[1], 64)
-				if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Network netmask"); err != nil {
+				if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Network netmask"); err != nil {
 					mutex.Unlock()
 					return err
 				}
 				addressCount := int(math.Pow(2, (32 - netmask)))
 
 				resp, err := client.GetEntities(*resp.Id, "IP4Address", 0, addressCount)
-				if err = bam.LogoutClientIfError(client, err, "Failed to get child IP4 Addresses"); err != nil {
+				if err = gobam.LogoutClientIfError(client, err, "Failed to get child IP4 Addresses"); err != nil {
 					mutex.Unlock()
 					return err
 				}
@@ -209,7 +209,7 @@ func resourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 				d.Set("allow_duplicate_host", val)
 			case "inheritAllowDuplicateHost":
 				b, err := strconv.ParseBool(val)
-				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritAllowDuplicateHost to bool"); err != nil {
+				if err = gobam.LogoutClientIfError(client, err, "Unable to parse inheritAllowDuplicateHost to bool"); err != nil {
 					mutex.Unlock()
 					return err
 				}
@@ -218,7 +218,7 @@ func resourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 				d.Set("ping_before_assign", val)
 			case "inheritPingBeforeAssign":
 				b, err := strconv.ParseBool(val)
-				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritPingBeforeAssign to bool"); err != nil {
+				if err = gobam.LogoutClientIfError(client, err, "Unable to parse inheritPingBeforeAssign to bool"); err != nil {
 					mutex.Unlock()
 					return err
 				}
@@ -227,7 +227,7 @@ func resourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 				d.Set("gateway", val)
 			case "inheritDefaultDomains":
 				b, err := strconv.ParseBool(val)
-				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritDefaultDomains to bool"); err != nil {
+				if err = gobam.LogoutClientIfError(client, err, "Unable to parse inheritDefaultDomains to bool"); err != nil {
 					mutex.Unlock()
 					return err
 				}
@@ -236,14 +236,14 @@ func resourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 				d.Set("default_view", val)
 			case "inheritDefaultView":
 				b, err := strconv.ParseBool(val)
-				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritDefaultView to bool"); err != nil {
+				if err = gobam.LogoutClientIfError(client, err, "Unable to parse inheritDefaultView to bool"); err != nil {
 					mutex.Unlock()
 					return err
 				}
 				d.Set("inherit_default_view", b)
 			case "inheritDNSRestrictions":
 				b, err := strconv.ParseBool(val)
-				if err = bam.LogoutClientIfError(client, err, "Unable to parse inheritDNSRestrictions to bool"); err != nil {
+				if err = gobam.LogoutClientIfError(client, err, "Unable to parse inheritDNSRestrictions to bool"); err != nil {
 					mutex.Unlock()
 					return err
 				}
@@ -274,7 +274,7 @@ func resourceIP4NetworkUpdate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -282,7 +282,7 @@ func resourceIP4NetworkUpdate(d *schema.ResourceData, meta interface{}) error {
 	properties := ""
 	otype := "IP4Network"
 
-	update := bam.APIEntity{
+	update := gobam.APIEntity{
 		Id:         &id,
 		Name:       &name,
 		Properties: &properties,
@@ -290,7 +290,7 @@ func resourceIP4NetworkUpdate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	client.Update(&update)
-	if err = bam.LogoutClientIfError(client, err, "IP4 Network Update failed"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "IP4 Network Update failed"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -315,13 +315,13 @@ func resourceIP4NetworkDelete(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
 
 	resp, err := client.GetEntityById(id)
-	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Network by Id"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Network by Id"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -337,7 +337,7 @@ func resourceIP4NetworkDelete(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	err = client.Delete(id)
-	if err = bam.LogoutClientIfError(client, err, "Delete failed"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Delete failed"); err != nil {
 		mutex.Unlock()
 		return err
 	}

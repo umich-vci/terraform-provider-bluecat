@@ -6,7 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/helper/validation"
-	"github.com/umich-vci/golang-bluecat"
+	"github.com/umich-vci/gobam"
 )
 
 func resourceIP4Address() *schema.Resource {
@@ -48,7 +48,7 @@ func resourceIP4Address() *schema.Resource {
 				Optional:     true,
 				Default:      "MAKE_STATIC",
 				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice(bam.IPAssignmentActions, false),
+				ValidateFunc: validation.StringInSlice(gobam.IPAssignmentActions, false),
 			},
 			"name": &schema.Schema{
 				Type:     schema.TypeString,
@@ -91,7 +91,7 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	configID, err := strconv.ParseInt(d.Get("configuration_id").(string), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert configuration_id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert configuration_id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -101,7 +101,7 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 		parentIDString = pid.(string)
 
 		if _, ok := d.GetOk("parent_id_list"); ok {
-			err := bam.LogoutClientWithError(client, "Cannot specify both parent_id and parent_id_list")
+			err := gobam.LogoutClientWithError(client, "Cannot specify both parent_id and parent_id_list")
 			mutex.Unlock()
 			return err
 		}
@@ -112,24 +112,24 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 			freeAddressMap := make(map[string]int)
 			for i := range list {
 				id, err := strconv.ParseInt(list[i].(string), 10, 64)
-				if err = bam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
+				if err = gobam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
 					mutex.Unlock()
 					return err
 				}
 				resp, err := client.GetEntityById(id)
-				if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Network by Id"); err != nil {
+				if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Network by Id"); err != nil {
 					mutex.Unlock()
 					return err
 				}
 
 				networkProperties, err := parseIP4NetworkProperties(*resp.Properties)
-				if err = bam.LogoutClientIfError(client, err, "Error parsing IP4 network properties"); err != nil {
+				if err = gobam.LogoutClientIfError(client, err, "Error parsing IP4 network properties"); err != nil {
 					mutex.Unlock()
 					return err
 				}
 
 				_, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.cidr, client)
-				if err = bam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
+				if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
 					mutex.Unlock()
 					return err
 				}
@@ -150,21 +150,21 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 			}
 
 			if freeCount == 0 {
-				err := bam.LogoutClientWithError(client, "No networks had a free address")
+				err := gobam.LogoutClientWithError(client, "No networks had a free address")
 				mutex.Unlock()
 				return err
 			}
 
 			parentIDString = parentIDMostFree
 		} else {
-			err := bam.LogoutClientWithError(client, "One of parent_id or parent_id_list must be specified")
+			err := gobam.LogoutClientWithError(client, "One of parent_id or parent_id_list must be specified")
 			mutex.Unlock()
 			return err
 		}
 	}
 
 	parentID, err := strconv.ParseInt(parentIDString, 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -181,7 +181,7 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	resp, err := client.AssignNextAvailableIP4Address(configID, parentID, macAddress, hostInfo, action, properties)
-	if err = bam.LogoutClientIfError(client, err, "AssignNextAvailableIP4Address failed"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "AssignNextAvailableIP4Address failed"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -209,13 +209,13 @@ func resourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
 
 	resp, err := client.GetEntityById(id)
-	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Address by Id"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Address by Id"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -250,7 +250,7 @@ func resourceIP4AddressUpdate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -270,7 +270,7 @@ func resourceIP4AddressUpdate(d *schema.ResourceData, meta interface{}) error {
 		}
 	}
 
-	update := bam.APIEntity{
+	update := gobam.APIEntity{
 		Id:         &id,
 		Name:       &name,
 		Properties: &properties,
@@ -278,7 +278,7 @@ func resourceIP4AddressUpdate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	err = client.Update(&update)
-	if err = bam.LogoutClientIfError(client, err, "IP4 Address Update failed"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "IP4 Address Update failed"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -303,13 +303,13 @@ func resourceIP4AddressDelete(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = bam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
 		return err
 	}
 
 	resp, err := client.GetEntityById(id)
-	if err = bam.LogoutClientIfError(client, err, "Failed to get IP4 Address by Id"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Address by Id"); err != nil {
 		mutex.Unlock()
 		return err
 	}
@@ -325,7 +325,7 @@ func resourceIP4AddressDelete(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	err = client.Delete(id)
-	if err = bam.LogoutClientIfError(client, err, "Delete failed"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Delete failed"); err != nil {
 		mutex.Unlock()
 		return err
 	}
