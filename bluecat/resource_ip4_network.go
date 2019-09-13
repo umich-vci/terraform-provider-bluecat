@@ -174,6 +174,18 @@ func resourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 
+	if *resp.Id == 0 {
+		d.SetId("")
+
+		if err := client.Logout(); err != nil {
+			mutex.Unlock()
+			return err
+		}
+
+		mutex.Unlock()
+		return nil
+	}
+
 	d.Set("name", *resp.Name)
 	d.Set("properties", *resp.Properties)
 	d.Set("type", resp.Type)
