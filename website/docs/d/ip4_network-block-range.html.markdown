@@ -42,8 +42,6 @@ The atributes returned will vary based on the object returned.
 
 * `properties` - The properties of the resource as returned by the API (pipe delimited).
 
-* `type` - The type of the resource.
-
 * `cidr` - The CIDR address of the IPv4 network.
 
 * `allow_duplicate_host` - Duplicate host names check.
@@ -53,8 +51,6 @@ The atributes returned will vary based on the object returned.
 * `ping_before_assign` - The network pings an address before assignment.
 
 * `inherit_ping_before_assign` - The network pings an address before assignment is inherited.
-
-* `reference` - ??
 
 * `gateway` - The gateway of the IPv4 network.
 
@@ -69,3 +65,5 @@ The atributes returned will vary based on the object returned.
 * `addresses_in_use` - The number of addresses allocated/in use on the network.
 
 * `addresses_free` - The number of addresses unallocated/free on the network.
+
+* `custom_properties` - A map of all custom properties associated with the IPv4 network.

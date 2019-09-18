@@ -18,8 +18,8 @@ data "bluecat_ip4_address" "addr" {
     address = "192.168.1.1"
 }
 
-output "bluecat_address_notes" {
-    value = data.bluecat_ip4_address.addr.notes
+output "bluecat_address_mac" {
+    value = data.bluecat_ip4_address.addr.mac_address
 }
 ```
 
@@ -38,12 +38,8 @@ output "bluecat_address_notes" {
 
 * `type` - The type of the resource.
 
-* `assigned_date` - The date the IPv4 address was assigned.
-
-* `requested_by` - The requestor of the IPv4 address.
-
-* `notes` -  Notes about the IPv4 address.
-
 * `state` - The state of the IPv4 address.
 
 * `mac_address` - The MAC address associated with the IPv4 address.
+
+* `custom_properties` - A map of all custom properties associated with the IPv4 address.

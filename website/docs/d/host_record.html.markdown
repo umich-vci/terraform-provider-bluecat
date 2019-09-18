@@ -50,3 +50,7 @@ output "bluecat_host_addresses" {
 * `addresses` - A set of all addresses associated with the host record.
 
 * `address_ids` - A set of all address ids associated with the host record.
+
+* `custom_properties` - A map of all custom properties associated with the host record.
+
+* `ttl` - The TTL of the host record.

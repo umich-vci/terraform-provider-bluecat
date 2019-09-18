@@ -45,6 +45,8 @@ output "bluecat_hostname_fqdn" {
 
 * `comments` - (Optional) Comments to be associated with the host record.
 
+* `custom_properties` - (Optional) A map of all custom properties associated with the host record.
+
 ## Attributes Reference
 
 * `properties` -  The properties of the IPv4 address as returned by the API (pipe delimited).

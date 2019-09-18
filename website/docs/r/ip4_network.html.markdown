@@ -40,8 +40,6 @@ output "bluecat_ip4_network_cidr" {
 
 The atributes returned will vary based on the object returned.
 
-* `name` - The name assigned the resource.
-
 * `properties` -  The properties of the resource as returned by the API (pipe delimited).
 
 * `type` - The type of the resource.

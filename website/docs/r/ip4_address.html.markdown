@@ -18,8 +18,8 @@ resource "bluecat_ip4_address" "addr" {
     address = "192.168.1.1"
 }
 
-output "bluecat_address_notes" {
-    value = data.bluecat_ip4_address.addr.notes
+output "bluecat_address_network" {
+    value = data.bluecat_ip4_address.addr.computed_parent_id
 }
 ```
 
@@ -27,8 +27,13 @@ output "bluecat_address_notes" {
 
 * `configuration_id` - (Required) The object ID of the Configuration that has the specified `address`.
 
-* `parent_id` - (Required) The object ID of the Configuration, Block, or Network to find the next available
-  IPv4 address in.
+* `parent_id` - (Optional) The object ID of the Configuration, Block, or Network to find the next available
+  IPv4 address in.  If changed, forces a new resource.  If not set, `parent_id_list` is required.
+
+* `parent_id_list` - (Optional) A list of object IDs of the Configuration, Block, or Network to find the next available
+  IPv4 address in.  The list will be parsed and the network with the most available addresses will be selected.
+  The list is only used at object creation, so it might be beneficial to use a `lifecycle` customization to ignore
+  changes to the list after resource creation.  If not set, `parent_id` is required.
 
 * `name` - (Required) The name assigned to the IPv4 address.  This is not related to DNS.
   
@@ -37,11 +42,7 @@ output "bluecat_address_notes" {
 * `action` - (Optional) The action to take on the next available IPv4 address.  Must be one of:
   MAKE_STATIC, MAKE_RESERVED, or MAKE_DHCP_RESERVED.  Defaults to MAKE_STATIC.
 
-* `assigned_date` - (Optional) The date the IPv4 address was assigned.
-
-* `requested_by` - (Optional) The requestor of the IPv4 address.
-
-* `notes` -  (Optional) Notes about the IPv4 address.
+* `custom_properties` - (Optional) A map of all custom properties associated with the IPv4 address.
 
 ## Attributes Reference
 
@@ -52,3 +53,6 @@ output "bluecat_address_notes" {
 * `state` - The state of the IPv4 address.
 
 * `type` - The type of the resource.
+
+* `computed_parent_id` - The ID network that was selected if `parent_id_list` was used to allocate the network.
+  Will contain the same value as `parent_id` if that is used instead.
