@@ -13,7 +13,7 @@ Use this resource to create an IPv4 network.
 ## Example Usage
 
 ```hcl
-data "bluecat_ip4_network" "network" {
+resource "bluecat_ip4_network" "network" {
     parent_id = data.bluecat_network-block-range.block.id
     name = "New Network"
     size = 256
