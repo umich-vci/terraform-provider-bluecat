@@ -29,6 +29,7 @@ func resourceIP4Network() *schema.Resource {
 			"size": &schema.Schema{
 				Type:     schema.TypeInt,
 				Required: true,
+				ForceNew: true,
 			},
 			"is_larger_allowed": &schema.Schema{
 				Type:     schema.TypeBool,
