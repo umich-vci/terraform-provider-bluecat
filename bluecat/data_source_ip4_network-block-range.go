@@ -41,7 +41,33 @@ func dataSourceIP4Network() *schema.Resource {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
+			"template": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"gateway": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"default_domains": &schema.Schema{
+				Type:     schema.TypeSet,
+				Computed: true,
+				Elem:     &schema.Schema{Type: schema.TypeString},
+			},
+			"default_view": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"dns_restrictions": &schema.Schema{
+				Type:     schema.TypeSet,
+				Computed: true,
+				Elem:     &schema.Schema{Type: schema.TypeString},
+			},
 			"allow_duplicate_host": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"ping_before_assign": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
 			},
@@ -49,31 +75,27 @@ func dataSourceIP4Network() *schema.Resource {
 				Type:     schema.TypeBool,
 				Computed: true,
 			},
-			"ping_before_assign": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
-			},
 			"inherit_ping_before_assign": &schema.Schema{
 				Type:     schema.TypeBool,
 				Computed: true,
 			},
-			"gateway": &schema.Schema{
-				Type:     schema.TypeString,
+			"inherit_dns_restrictions": &schema.Schema{
+				Type:     schema.TypeBool,
 				Computed: true,
 			},
 			"inherit_default_domains": &schema.Schema{
 				Type:     schema.TypeBool,
 				Computed: true,
 			},
-			"default_view": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
-			},
 			"inherit_default_view": &schema.Schema{
 				Type:     schema.TypeBool,
 				Computed: true,
 			},
-			"inherit_dns_restrictions": &schema.Schema{
+			"location_code": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"location_inherited": &schema.Schema{
 				Type:     schema.TypeBool,
 				Computed: true,
 			},
@@ -120,25 +142,30 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("properties", *resp.Properties)
 	d.Set("type", *resp.Type)
 
-	networkProperties, err := parseIP4NetworkProperties(*resp.Properties)
+	networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)
 	if err = gobam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
 		mutex.Unlock()
 		return err
 	}
 
-	d.Set("cidr", networkProperties.cidr)
-	d.Set("allow_duplicate_host", networkProperties.allowDuplicateHost)
-	d.Set("inherit_allow_duplicate_host", networkProperties.inheritAllowDuplicateHost)
-	d.Set("inherit_ping_before_assign", networkProperties.inheritPingBeforeAssign)
-	d.Set("ping_before_assign", networkProperties.pingBeforeAssign)
-	d.Set("gateway", networkProperties.gateway)
-	d.Set("inherit_default_domains", networkProperties.inheritDefaultDomains)
-	d.Set("default_view", networkProperties.defaultView)
-	d.Set("inherit_default_view", networkProperties.inheritDefaultView)
-	d.Set("inherit_dns_restrictions", networkProperties.inheritDNSRestrictions)
-	d.Set("custom_properties", networkProperties.customProperties)
+	d.Set("cidr", networkProperties.CIDR)
+	d.Set("template", networkProperties.Template)
+	d.Set("gateway", networkProperties.Gateway)
+	d.Set("default_domains", networkProperties.DefaultDomains)
+	d.Set("default_view", networkProperties.DefaultView)
+	d.Set("dns_restrictions", networkProperties.DefaultDomains)
+	d.Set("allow_duplicate_host", networkProperties.AllowDuplicateHost)
+	d.Set("ping_before_assign", networkProperties.PingBeforeAssign)
+	d.Set("inherit_allow_duplicate_host", networkProperties.InheritAllowDuplicateHost)
+	d.Set("inherit_ping_before_assign", networkProperties.InheritPingBeforeAssign)
+	d.Set("inherit_dns_restrictions", networkProperties.InheritDNSRestrictions)
+	d.Set("inherit_default_domains", networkProperties.InheritDefaultDomains)
+	d.Set("inherit_default_view", networkProperties.InheritDefaultView)
+	d.Set("location_code", networkProperties.LocationCode)
+	d.Set("location_inherited", networkProperties.LocationInherited)
+	d.Set("custom_properties", networkProperties.CustomProperties)
 
-	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.cidr, client)
+	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.CIDR, client)
 	if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
 		mutex.Unlock()
 		return err
@@ -156,80 +183,6 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	mutex.Unlock()
 
 	return nil
-}
-
-type ip4NetworkProperties struct {
-	cidr                      string
-	allowDuplicateHost        string
-	inheritAllowDuplicateHost bool
-	pingBeforeAssign          string
-	inheritPingBeforeAssign   bool
-	gateway                   string
-	inheritDefaultDomains     bool
-	defaultView               string
-	inheritDefaultView        bool
-	inheritDNSRestrictions    bool
-	customProperties          map[string]string
-}
-
-func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, error) {
-	var networkProperties ip4NetworkProperties
-	networkProperties.customProperties = make(map[string]string)
-
-	props := strings.Split(properties, "|")
-	for x := range props {
-		if len(props[x]) > 0 {
-			prop := strings.Split(props[x], "=")[0]
-			val := strings.Split(props[x], "=")[1]
-
-			switch prop {
-			case "CIDR":
-				networkProperties.cidr = val
-			case "allowDuplicateHost":
-				networkProperties.allowDuplicateHost = val
-			case "inheritAllowDuplicateHost":
-				b, err := strconv.ParseBool(val)
-				if err != nil {
-					return networkProperties, fmt.Errorf("Error parsing inheritAllowDuplicateHost to bool")
-				}
-				networkProperties.inheritAllowDuplicateHost = b
-			case "pingBeforeAssign":
-				networkProperties.pingBeforeAssign = val
-			case "inheritPingBeforeAssign":
-				b, err := strconv.ParseBool(val)
-				if err != nil {
-					return networkProperties, fmt.Errorf("Error parsing inheritPingBeforeAssign to bool")
-				}
-				networkProperties.inheritPingBeforeAssign = b
-			case "gateway":
-				networkProperties.gateway = val
-			case "inheritDefaultDomains":
-				b, err := strconv.ParseBool(val)
-				if err != nil {
-					return networkProperties, fmt.Errorf("Error parsing inheritDefaultDomains to bool")
-				}
-				networkProperties.inheritDefaultDomains = b
-			case "defaultView":
-				networkProperties.defaultView = val
-			case "inheritDefaultView":
-				b, err := strconv.ParseBool(val)
-				if err != nil {
-					return networkProperties, fmt.Errorf("Error parsing inheritDefaultView to bool")
-				}
-				networkProperties.inheritDefaultView = b
-			case "inheritDNSRestrictions":
-				b, err := strconv.ParseBool(val)
-				if err != nil {
-					return networkProperties, fmt.Errorf("Error parsing inheritDNSRestrictions to bool")
-				}
-				networkProperties.inheritDNSRestrictions = b
-			default:
-				networkProperties.customProperties[prop] = val
-			}
-		}
-	}
-
-	return networkProperties, nil
 }
 
 func getIP4NetworkAddressUsage(id int64, cidr string, client gobam.ProteusAPI) (int, int, error) {
