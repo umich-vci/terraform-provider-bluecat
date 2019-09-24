@@ -122,13 +122,13 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 					return err
 				}
 
-				networkProperties, err := parseIP4NetworkProperties(*resp.Properties)
+				networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)
 				if err = gobam.LogoutClientIfError(client, err, "Error parsing IP4 network properties"); err != nil {
 					mutex.Unlock()
 					return err
 				}
 
-				_, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.cidr, client)
+				_, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.CIDR, client)
 				if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
 					mutex.Unlock()
 					return err
@@ -173,9 +173,10 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 	action := d.Get("action").(string)
 	name := d.Get("name").(string)
 	properties := "name=" + name + "|"
-
-	if customProperties, ok := d.GetOk("custom_properties"); ok {
-		for k, v := range customProperties.(map[string]interface{}) {
+	customProperties := make(map[string]string)
+	if rawCustomProperties, ok := d.GetOk("custom_properties"); ok {
+		for k, v := range rawCustomProperties.(map[string]interface{}) {
+			customProperties[k] = v.(string)
 			properties = properties + k + "=" + v.(string) + "|"
 		}
 	}
