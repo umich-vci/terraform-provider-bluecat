@@ -2,9 +2,7 @@ package bluecat
 
 import (
 	"log"
-	"math"
 	"strconv"
-	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/umich-vci/gobam"
@@ -191,81 +189,32 @@ func resourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("properties", *resp.Properties)
 	d.Set("type", resp.Type)
 
-	props := strings.Split(*resp.Properties, "|")
-	for x := range props {
-		if len(props[x]) > 0 {
-			prop := strings.Split(props[x], "=")[0]
-			val := strings.Split(props[x], "=")[1]
-
-			switch prop {
-			case "CIDR":
-				netmask, err := strconv.ParseFloat(strings.Split(val, "/")[1], 64)
-				if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Network netmask"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				addressCount := int(math.Pow(2, (32 - netmask)))
-
-				resp, err := client.GetEntities(*resp.Id, "IP4Address", 0, addressCount)
-				if err = gobam.LogoutClientIfError(client, err, "Failed to get child IP4 Addresses"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-
-				addressesInUse := len(resp.Item)
-				addressesFree := addressCount - addressesInUse
-
-				d.Set("addresses_in_use", addressesInUse)
-				d.Set("addresses_free", addressesFree)
-				d.Set("cidr", val)
-			case "allowDuplicateHost":
-				d.Set("allow_duplicate_host", val)
-			case "inheritAllowDuplicateHost":
-				b, err := strconv.ParseBool(val)
-				if err = gobam.LogoutClientIfError(client, err, "Unable to parse inheritAllowDuplicateHost to bool"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				d.Set("inherit_allow_duplicate_host", b)
-			case "pingBeforeAssign":
-				d.Set("ping_before_assign", val)
-			case "inheritPingBeforeAssign":
-				b, err := strconv.ParseBool(val)
-				if err = gobam.LogoutClientIfError(client, err, "Unable to parse inheritPingBeforeAssign to bool"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				d.Set("inherit_ping_before_assign", b)
-			case "gateway":
-				d.Set("gateway", val)
-			case "inheritDefaultDomains":
-				b, err := strconv.ParseBool(val)
-				if err = gobam.LogoutClientIfError(client, err, "Unable to parse inheritDefaultDomains to bool"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				d.Set("inherit_default_domains", b)
-			case "defaultView":
-				d.Set("default_view", val)
-			case "inheritDefaultView":
-				b, err := strconv.ParseBool(val)
-				if err = gobam.LogoutClientIfError(client, err, "Unable to parse inheritDefaultView to bool"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				d.Set("inherit_default_view", b)
-			case "inheritDNSRestrictions":
-				b, err := strconv.ParseBool(val)
-				if err = gobam.LogoutClientIfError(client, err, "Unable to parse inheritDNSRestrictions to bool"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				d.Set("inherit_dns_restrictions", b)
-			default:
-				log.Printf("[WARN] Unknown IP4 Address Property: %s", prop)
-			}
-		}
+	networkProperties, err := parseIP4NetworkProperties(*resp.Properties)
+	if err = gobam.LogoutClientIfError(client, err, "Error parsing IPv4 network properties"); err != nil {
+		mutex.Unlock()
+		return err
 	}
+
+	d.Set("cidr", networkProperties.cidr)
+	d.Set("allow_duplicate_host", networkProperties.allowDuplicateHost)
+	d.Set("inherit_allow_duplicate_host", networkProperties.inheritAllowDuplicateHost)
+	d.Set("inherit_ping_before_assign", networkProperties.inheritPingBeforeAssign)
+	d.Set("ping_before_assign", networkProperties.pingBeforeAssign)
+	d.Set("gateway", networkProperties.gateway)
+	d.Set("inherit_default_domains", networkProperties.inheritDefaultDomains)
+	d.Set("default_view", networkProperties.defaultView)
+	d.Set("inherit_default_view", networkProperties.inheritDefaultView)
+	d.Set("inherit_dns_restrictions", networkProperties.inheritDNSRestrictions)
+	d.Set("custom_properties", networkProperties.customProperties)
+
+	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.cidr, client)
+	if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
+		mutex.Unlock()
+		return err
+	}
+
+	d.Set("addresses_in_use", addressesInUse)
+	d.Set("addresses_free", addressesFree)
 
 	// logout client
 	if err := client.Logout(); err != nil {
