@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform/helper/validation"
 	"github.com/umich-vci/gobam"
 )
 
@@ -34,12 +35,24 @@ func resourceIP4Network() *schema.Resource {
 				Optional: true,
 				Default:  false,
 			},
+			// We don't want to touch resources created outside of Terraform so always assume false
+			// "reuse_existing": &schema.Schema{
+			// 	Type:     schema.TypeBool,
+			// 	Optional: true,
+			// 	Default:  false,
+			// },
 			// We don't use auto_create since we will always want to create a network
 			// "auto_create": &schema.Schema{
 			// 	Type:     schema.TypeBool,
 			// 	Optional: true,
 			// 	Default:  true,
 			// },
+			"traversal_method": &schema.Schema{
+				Type:         schema.TypeString,
+				Optional:     true,
+				Default:      "NO_TRAVERSAL",
+				ValidateFunc: validation.StringInSlice([]string{"NO_TRAVERSAL", "DEPTH_FIRST", "BREADTH_FIRST"}, false),
+			},
 			"properties": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
@@ -114,19 +127,26 @@ func resourceIP4NetworkCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 	size := int64(d.Get("size").(int))
 	isLargerAllowed := d.Get("is_larger_allowed").(bool)
-	autoCreate := true //we always want to create since this is a resource after all
+	traversalMethod := d.Get("traversal_method").(string)
+	autoCreate := true     //we always want to create since this is a resource after all
+	reuseExisting := false //we never want to use an existing network created outside terraform
+	Type := "IP4Network"   //Since this is the ip4_network resource we are setting the type
+	properties := "reuseExisting=" + strconv.FormatBool(reuseExisting) + "|"
+	properties = properties + "isLargerAllowed=" + strconv.FormatBool(isLargerAllowed) + "|"
+	properties = properties + "autoCreate=" + strconv.FormatBool(autoCreate) + "|"
+	properties = properties + "traversalMethod=" + traversalMethod + "|"
 
-	resp, err := client.GetNextAvailableIP4Network(parentID, size, isLargerAllowed, autoCreate)
+	resp, err := client.GetNextAvailableIPRange(parentID, size, Type, properties)
 	if err = gobam.LogoutClientIfError(client, err, "Failed on GetNextAvailableIP4Network"); err != nil {
 		mutex.Unlock()
 		return err
 	}
 
-	d.SetId(strconv.FormatInt(resp, 10))
+	d.SetId(strconv.FormatInt(*resp.Id, 10))
 
-	id := resp
+	id := *resp.Id
 	name := d.Get("name").(string)
-	properties := ""
+	properties = ""
 	otype := "IP4Network"
 
 	setName := gobam.APIEntity{
@@ -137,7 +157,7 @@ func resourceIP4NetworkCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	client.Update(&setName)
-	if err = gobam.LogoutClientIfError(client, err, "IP4 Network Update failed"); err != nil {
+	if err = gobam.LogoutClientIfError(client, err, "Failed to update new IP4 Network"); err != nil {
 		mutex.Unlock()
 		return err
 	}
