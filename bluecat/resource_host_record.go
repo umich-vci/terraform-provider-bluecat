@@ -65,6 +65,9 @@ func resourceHostRecord() *schema.Resource {
 			"custom_properties": &schema.Schema{
 				Type:     schema.TypeMap,
 				Optional: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
 			},
 		},
 	}
