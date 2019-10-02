@@ -23,19 +23,20 @@ func Provider() terraform.ResourceProvider {
 		Schema: map[string]*schema.Schema{
 			"username": {
 				Type:        schema.TypeString,
-				Optional:    true,
+				Required:    true,
 				DefaultFunc: schema.EnvDefaultFunc("BLUECAT_USERNAME", nil),
 				Description: "A BlueCat Address Manager username.",
 			},
 			"password": {
 				Type:        schema.TypeString,
-				Optional:    true,
+				Required:    true,
+				Sensitive:   true,
 				DefaultFunc: schema.EnvDefaultFunc("BLUECAT_PASSWORD", nil),
 				Description: "The BlueCat Address Manager password.",
 			},
 			"bluecat_endpoint": {
 				Type:        schema.TypeString,
-				Optional:    true,
+				Required:    true,
 				DefaultFunc: schema.EnvDefaultFunc("BLUECAT_ENDPOINT", nil),
 				Description: "The BlueCat Address Manager endpoint hostname",
 			},
