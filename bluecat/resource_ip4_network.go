@@ -209,25 +209,25 @@ func resourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("properties", *resp.Properties)
 	d.Set("type", resp.Type)
 
-	networkProperties, err := parseIP4NetworkProperties(*resp.Properties)
+	networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)
 	if err = gobam.LogoutClientIfError(client, err, "Error parsing IPv4 network properties"); err != nil {
 		mutex.Unlock()
 		return err
 	}
 
-	d.Set("cidr", networkProperties.cidr)
-	d.Set("allow_duplicate_host", networkProperties.allowDuplicateHost)
-	d.Set("inherit_allow_duplicate_host", networkProperties.inheritAllowDuplicateHost)
-	d.Set("inherit_ping_before_assign", networkProperties.inheritPingBeforeAssign)
-	d.Set("ping_before_assign", networkProperties.pingBeforeAssign)
-	d.Set("gateway", networkProperties.gateway)
-	d.Set("inherit_default_domains", networkProperties.inheritDefaultDomains)
-	d.Set("default_view", networkProperties.defaultView)
-	d.Set("inherit_default_view", networkProperties.inheritDefaultView)
-	d.Set("inherit_dns_restrictions", networkProperties.inheritDNSRestrictions)
-	d.Set("custom_properties", networkProperties.customProperties)
+	d.Set("cidr", networkProperties.CIDR)
+	d.Set("allow_duplicate_host", networkProperties.AllowDuplicateHost)
+	d.Set("inherit_allow_duplicate_host", networkProperties.InheritAllowDuplicateHost)
+	d.Set("inherit_ping_before_assign", networkProperties.InheritPingBeforeAssign)
+	d.Set("ping_before_assign", networkProperties.PingBeforeAssign)
+	d.Set("gateway", networkProperties.Gateway)
+	d.Set("inherit_default_domains", networkProperties.InheritDefaultDomains)
+	d.Set("default_view", networkProperties.DefaultView)
+	d.Set("inherit_default_view", networkProperties.InheritDefaultView)
+	d.Set("inherit_dns_restrictions", networkProperties.InheritDNSRestrictions)
+	d.Set("custom_properties", networkProperties.CustomProperties)
 
-	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.cidr, client)
+	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.CIDR, client)
 	if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
 		mutex.Unlock()
 		return err
