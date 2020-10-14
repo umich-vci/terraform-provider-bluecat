@@ -174,8 +174,6 @@ github.com/stretchr/testify v1.3.0 h1:TivCn/peBQ7UY8ooIcPgZFpTNSz0Q2U6UrFlUfqbe0
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/ulikunitz/xz v0.5.5 h1:pFrO0lVpTBXLpYw+pnLj6TbvHuyjXMfjGeCwSqCVwok=
 github.com/ulikunitz/xz v0.5.5/go.mod h1:2bypXElzHzzJZwzH67Y6wb67pO62Rzfn7BSiF4ABRW8=
-github.com/umich-vci/gobam v0.0.0-20190924180926-651d7b3f973a h1:sJwR4JzijkPsklKgTI/k7jxITq4LWEyhNl73q35OJgI=
-github.com/umich-vci/gobam v0.0.0-20190924180926-651d7b3f973a/go.mod h1:J86QkXwog8X6KFTQbqP+/hcmF1g6UYE02GyJBwnSOK8=
 github.com/umich-vci/gobam v0.0.0-20191113181306-7a9a665732fa h1:qFueiYhcTGyOv6ad4ReEXomEfapq+BOOpO4zVL3yrME=
 github.com/umich-vci/gobam v0.0.0-20191113181306-7a9a665732fa/go.mod h1:XgS74BOgjV2krJLMpvpOsF+vYyc7MQdYztgE1Q/3dtY=
 github.com/vmihailenco/msgpack v3.3.3+incompatible h1:wapg9xDUZDzGCNFlwc5SqI1rvcciqcxEHac4CYj89xI=
