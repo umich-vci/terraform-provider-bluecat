@@ -11,7 +11,9 @@ Currently, the provider does not have working tests so it should probably be con
 
 ## Building/Installing
 
-Running `GO111MODULE=on go get -u github.com/umich-vci/terraform-provider-bluecat` should download
+The provider is now available on the [Terraform Registry](https://registry.terraform.io/providers/umich-vci/bluecat/latest) so you probably don't need to build the provider.
+
+That said, running `GO111MODULE=on go get -u github.com/umich-vci/terraform-provider-bluecat` should download
 the code and result in a binary at `$GOPATH/bin/terraform-provider-bluecat`. You can then move the
 binary to `~/.terraform.d/plugins` to use it with Terraform.
 
