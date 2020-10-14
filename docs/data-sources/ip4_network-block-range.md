@@ -1,12 +1,4 @@
----
-layout: "bluecat"
-page_title: "BlueCat: bluecat_ip4_network-block-range"
-sidebar_current: "docs-bluecat-datasource-ip4-network-block-range"
-description: |-
- Gets information about an existing IPv4 network, IPv4 Block, or DHCPv4 Range.
----
-
-# bluecat\_ip4\_network-block-range
+# bluecat\_ip4\_network-block-range Data Source
 
 Use this data source to access the attributes of an IPv4 network, IPv4 Block, or DHCPv4 Range.
 

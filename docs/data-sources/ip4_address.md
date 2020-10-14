@@ -1,12 +1,4 @@
----
-layout: "bluecat"
-page_title: "BlueCat: bluecat_ip4_address"
-sidebar_current: "docs-bluecat-datasource-ip4-address"
-description: |-
- Gets information about an existing IPv4 address.
----
-
-# bluecat\_ip4\_address
+# bluecat\_ip4\_address Data Source
 
 Use this data source to access the attributes of an IPv4 address.
 
@@ -30,7 +22,7 @@ output "bluecat_address_mac" {
 
 * `address` - (Required) The IPv4 address to get data for.
 
-## Attributes Reference
+## Attribute Reference
 
 * `name` - The name assigned to the IPv4 address.  This is not related to DNS.
 

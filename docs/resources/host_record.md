@@ -1,12 +1,4 @@
----
-layout: "bluecat"
-page_title: "BlueCat: bluecat_host_record"
-sidebar_current: "docs-bluecat-resource-host_record"
-description: |-
- Create a host record for address(es).
----
-
-# bluecat\_host\_record
+# bluecat\_host\_record Resource
 
 Use this resource create a host record.
 
@@ -16,7 +8,7 @@ Use this resource create a host record.
 resource "bluecat_host_record" "hostname" {
     view = data.bluecat_entity.view.id
     name = "hostname"
-    dns_zone = "example.com
+    dns_zone = "example.com"
     addresses = ["192.168.1.100"]
 }
 

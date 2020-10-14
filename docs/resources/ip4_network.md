@@ -1,12 +1,4 @@
----
-layout: "bluecat"
-page_title: "BlueCat: bluecat_ip4_network"
-sidebar_current: "docs-bluecat-resource-ip4-network"
-description: |-
- Create an IPv4 network.
----
-
-# bluecat\_ip4\_network
+# bluecat\_ip4\_network Resource
 
 Use this resource to create an IPv4 network.
 
@@ -36,7 +28,10 @@ output "bluecat_ip4_network_cidr" {
 * `is_larger_allowed` - (Optional) Is it ok to return a network that is larger than the size specified?
   Default is false.
 
-## Attributes Reference
+* `traversal_method` - (Optional) The traversal method used to find the range to allocate the network.
+  Must be one of "NO_TRAVERSAL", "DEPTH_FIRST", or "BREADTH_FIRST". Defaults to "NO_TRAVERSAL"
+
+## Attribute Reference
 
 The atributes returned will vary based on the object returned.
 

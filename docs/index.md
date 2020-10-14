@@ -1,11 +1,3 @@
----
-layout: "bluecat"
-page_title: "Provider: BlueCat"
-sidebar_current: "docs-bluecat-index"
-description: |-
-  The BlueCat provider is used to interact with an instance of BlueCat Address Manager.
----
-
 # BlueCat Provider
 
  The BlueCat provider is used to interact with BlueCat Address Manager.

@@ -1,12 +1,4 @@
----
-layout: "bluecat"
-page_title: "BlueCat: bluecat_host_record"
-sidebar_current: "docs-bluecat-datasource-host-record"
-description: |-
- Gets information about an existing host record.
----
-
-# bluecat\_host\_record
+# bluecat\_host\_record Data Source
 
 Use this data source to access the attributes of a host record.  If the API returns more than one
 host record that matches, an error will be returned.

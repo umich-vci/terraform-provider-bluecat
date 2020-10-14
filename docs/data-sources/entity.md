@@ -1,12 +1,4 @@
----
-layout: "bluecat"
-page_title: "BlueCat: bluecat_entity"
-sidebar_current: "docs-bluecat-datasource-entity"
-description: |-
- Gets information about an a BlueCat entity.
----
-
-# bluecat\_entity
+# bluecat\_entity Data Source
 
 Use this data source to access the attributes of a BlueCat entity.
 

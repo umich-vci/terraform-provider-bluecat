@@ -1,12 +1,4 @@
----
-layout: "bluecat"
-page_title: "BlueCat: bluecat_ip4_address"
-sidebar_current: "docs-bluecat-resource-ip4-address"
-description: |-
- Requests an IPv4 address from a network.
----
-
-# bluecat\_ip4\_address
+# bluecat\_ip4\_address Resource
 
 Use this resource to reserve an IPv4 address.
 
@@ -14,18 +6,19 @@ Use this resource to reserve an IPv4 address.
 
 ```hcl
 resource "bluecat_ip4_address" "addr" {
-    container_id = data.bluecat_entity.config.id
-    address = "192.168.1.1"
+    configuration_id = data.bluecat_entity.config.id
+    name = "IP Reserved for Example"
+    parent_id = data.bluecat_ip4_network.example_net.id
 }
 
-output "bluecat_address_network" {
-    value = data.bluecat_ip4_address.addr.computed_parent_id
+output "allocated_address" {
+    value = bluecat_ip4_address.addr.address
 }
 ```
 
 ## Argument Reference
 
-* `configuration_id` - (Required) The object ID of the Configuration that has the specified `address`.
+* `configuration_id` - (Required) The object ID of the Configuration that will hold the new address.
 
 * `parent_id` - (Optional) The object ID of the Configuration, Block, or Network to find the next available
   IPv4 address in.  If changed, forces a new resource.  If not set, `parent_id_list` is required.
