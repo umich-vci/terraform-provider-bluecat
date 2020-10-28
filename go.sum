@@ -174,8 +174,8 @@ github.com/stretchr/testify v1.3.0 h1:TivCn/peBQ7UY8ooIcPgZFpTNSz0Q2U6UrFlUfqbe0
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/ulikunitz/xz v0.5.5 h1:pFrO0lVpTBXLpYw+pnLj6TbvHuyjXMfjGeCwSqCVwok=
 github.com/ulikunitz/xz v0.5.5/go.mod h1:2bypXElzHzzJZwzH67Y6wb67pO62Rzfn7BSiF4ABRW8=
-github.com/umich-vci/gobam v0.0.0-20191113181306-7a9a665732fa h1:qFueiYhcTGyOv6ad4ReEXomEfapq+BOOpO4zVL3yrME=
-github.com/umich-vci/gobam v0.0.0-20191113181306-7a9a665732fa/go.mod h1:XgS74BOgjV2krJLMpvpOsF+vYyc7MQdYztgE1Q/3dtY=
+github.com/umich-vci/gobam v0.0.0-20201026200032-5742f663694f h1:KWw7Cv8RftECmBCYaaT8VTU2V+183TO9zpJOd6De3Gc=
+github.com/umich-vci/gobam v0.0.0-20201026200032-5742f663694f/go.mod h1:XgS74BOgjV2krJLMpvpOsF+vYyc7MQdYztgE1Q/3dtY=
 github.com/vmihailenco/msgpack v3.3.3+incompatible h1:wapg9xDUZDzGCNFlwc5SqI1rvcciqcxEHac4CYj89xI=
 github.com/vmihailenco/msgpack v3.3.3+incompatible/go.mod h1:fy3FlTQTDXWkZ7Bh6AcGMlsjHatGryHQYUTf1ShIgkk=
 github.com/zclconf/go-cty v1.0.0/go.mod h1:xnAOWiHeOqg2nWS62VtQ7pbOu17FtxJNW8RLEih+O3s=
