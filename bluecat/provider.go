@@ -12,6 +12,7 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 		Username:        d.Get("username").(string),
 		Password:        d.Get("password").(string),
 		BlueCatEndpoint: d.Get("bluecat_endpoint").(string),
+		SSLVerify:       d.Get("ssl_verify").(bool),
 	}
 
 	return config, nil
@@ -39,6 +40,12 @@ func Provider() terraform.ResourceProvider {
 				Required:    true,
 				DefaultFunc: schema.EnvDefaultFunc("BLUECAT_ENDPOINT", nil),
 				Description: "The BlueCat Address Manager endpoint hostname",
+			},
+			"ssl_verify": {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Default:     true,
+				Description: "Verify the SSL certificate of the BlueCat Address Manager endpoint",
 			},
 		},
 		ResourcesMap: map[string]*schema.Resource{
