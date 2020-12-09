@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/umich-vci/gobam"
 )
 
@@ -18,9 +17,9 @@ func resourceIP4AvailableNetwork() *schema.Resource {
 		Delete: schema.RemoveFromState,
 		Schema: map[string]*schema.Schema{
 			"network_id_list": &schema.Schema{
-				Type:         schema.TypeList,
-				Required:     true,
-				ValidateFunc: validation.NoZeroValues,
+				Type:     schema.TypeList,
+				Required: true,
+				ForceNew: true,
 				Elem: &schema.Schema{
 					Type: schema.TypeInt,
 				},
