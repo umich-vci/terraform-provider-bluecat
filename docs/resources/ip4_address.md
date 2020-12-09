@@ -20,13 +20,8 @@ output "allocated_address" {
 
 * `configuration_id` - (Required) The object ID of the Configuration that will hold the new address.
 
-* `parent_id` - (Optional) The object ID of the Configuration, Block, or Network to find the next available
-  IPv4 address in.  If changed, forces a new resource.  If not set, `parent_id_list` is required.
-
-* `parent_id_list` - (Optional) A list of object IDs of the Configuration, Block, or Network to find the next available
-  IPv4 address in.  The list will be parsed and the network with the most available addresses will be selected.
-  The list is only used at object creation, so it might be beneficial to use a `lifecycle` customization to ignore
-  changes to the list after resource creation.  If not set, `parent_id` is required.
+* `parent_id` - (Required) The object ID of the Configuration, Block, or Network to find the next available
+  IPv4 address in.  If changed, forces a new resource.
 
 * `name` - (Required) The name assigned to the IPv4 address.  This is not related to DNS.
   
@@ -46,6 +41,3 @@ output "allocated_address" {
 * `state` - The state of the IPv4 address.
 
 * `type` - The type of the resource.
-
-* `computed_parent_id` - The ID network that was selected if `parent_id_list` was used to allocate the network.
-  Will contain the same value as `parent_id` if that is used instead.

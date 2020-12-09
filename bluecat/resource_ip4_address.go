@@ -4,8 +4,8 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/umich-vci/gobam"
 )
 
@@ -24,13 +24,8 @@ func resourceIP4Address() *schema.Resource {
 			},
 			"parent_id": &schema.Schema{
 				Type:     schema.TypeString,
-				Optional: true,
+				Required: true,
 				ForceNew: true,
-			},
-			"parent_id_list": &schema.Schema{
-				Type:     schema.TypeSet,
-				Optional: true,
-				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
 			"mac_address": &schema.Schema{
 				Type:     schema.TypeString,
@@ -74,10 +69,6 @@ func resourceIP4Address() *schema.Resource {
 				Type:     schema.TypeMap,
 				Optional: true,
 			},
-			"computed_parent_id": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
-			},
 		},
 	}
 }
@@ -96,72 +87,7 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 
-	parentIDString := ""
-	if pid, ok := d.GetOk("parent_id"); ok {
-		parentIDString = pid.(string)
-
-		if _, ok := d.GetOk("parent_id_list"); ok {
-			err := gobam.LogoutClientWithError(client, "Cannot specify both parent_id and parent_id_list")
-			mutex.Unlock()
-			return err
-		}
-
-	} else {
-		if pidList, ok := d.GetOk("parent_id_list"); ok {
-			list := pidList.(*schema.Set).List()
-			freeAddressMap := make(map[string]int)
-			for i := range list {
-				id, err := strconv.ParseInt(list[i].(string), 10, 64)
-				if err = gobam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-				resp, err := client.GetEntityById(id)
-				if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Network by Id"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-
-				networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)
-				if err = gobam.LogoutClientIfError(client, err, "Error parsing IP4 network properties"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-
-				_, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.CIDR, client)
-				if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
-					mutex.Unlock()
-					return err
-				}
-
-				if addressesFree > 0 {
-					freeAddressMap[strconv.FormatInt(id, 10)] = addressesFree
-				}
-
-			}
-
-			parentIDMostFree := ""
-			freeCount := 0
-			for k, v := range freeAddressMap {
-				if v > freeCount {
-					freeCount = v
-					parentIDMostFree = k
-				}
-			}
-
-			if freeCount == 0 {
-				err := gobam.LogoutClientWithError(client, "No networks had a free address")
-				mutex.Unlock()
-				return err
-			}
-
-			parentIDString = parentIDMostFree
-		} else {
-			err := gobam.LogoutClientWithError(client, "One of parent_id or parent_id_list must be specified")
-			mutex.Unlock()
-			return err
-		}
-	}
+	parentIDString := d.Get("parent_id").(string)
 
 	parentID, err := strconv.ParseInt(parentIDString, 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
@@ -188,7 +114,6 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	d.SetId(strconv.FormatInt(*resp.Id, 10))
-	d.Set("computed_parent_id", parentIDString)
 
 	// logout client
 	if err := client.Logout(); err != nil {
