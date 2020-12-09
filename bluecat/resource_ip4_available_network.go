@@ -61,6 +61,12 @@ func resourceIP4AvailableNetworkCreate(d *schema.ResourceData, meta interface{})
 	seed := d.Get("seed").(string)
 	random := d.Get("random").(bool)
 
+	if len(networkIDList) == 0 {
+		err := gobam.LogoutClientWithError(client, "network_id_list cannot be empty")
+		mutex.Unlock()
+		return err
+	}
+
 	if random {
 		rand := NewRand(seed)
 
