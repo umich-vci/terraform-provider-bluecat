@@ -159,7 +159,7 @@ func resourceIP4AvailableNetworkCreate(d *schema.ResourceData, meta interface{})
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()
 
-	return resourceIP4NetworkRead(d, meta)
+	return nil
 }
 
 // NewRand returns a seeded random number generator, using a seed derived
