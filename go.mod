@@ -1,6 +1,6 @@
 module github.com/umich-vci/terraform-provider-bluecat
 
-go 1.13
+go 1.15
 
 require (
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.0.3

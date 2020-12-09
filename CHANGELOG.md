@@ -18,6 +18,8 @@ IMPROVEMENTS:
 
 * Switched from Terraform SDK v1 to v2 ([#5](https://github.com/umich-vci/terraform-provider-bluecat/pull/5))
 
+* Now building with go 1.15
+
 ## 0.1.0 (October 14, 2020)
 
 First release of provider.
