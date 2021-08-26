@@ -1,7 +1,6 @@
-package bluecat
+package provider
 
 import (
-	"fmt"
 	"log"
 	"strconv"
 
@@ -14,21 +13,21 @@ func dataSourceEntity() *schema.Resource {
 	return &schema.Resource{
 		Read: dataSourceEntityRead,
 		Schema: map[string]*schema.Schema{
-			"parent_id": &schema.Schema{
+			"parent_id": {
 				Type:     schema.TypeString,
 				Optional: true,
 				Default:  0,
 			},
-			"name": &schema.Schema{
+			"name": {
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			"type": &schema.Schema{
+			"type": {
 				Type:         schema.TypeString,
 				Required:     true,
 				ValidateFunc: validation.StringInSlice(gobam.ObjectTypes, false),
 			},
-			"properties": &schema.Schema{
+			"properties": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
@@ -38,16 +37,8 @@ func dataSourceEntity() *schema.Resource {
 
 func dataSourceEntityRead(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	config := meta.(*Config)
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
-	err = client.Login(config.Username, config.Password)
-	if err != nil {
-		return fmt.Errorf("Login error: %s", err)
-	}
+	client := meta.(*apiClient).Client
+
 	parentID, err := strconv.ParseInt(d.Get("parent_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
 		mutex.Unlock()

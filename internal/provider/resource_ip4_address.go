@@ -1,4 +1,4 @@
-package bluecat
+package provider
 
 import (
 	"log"
@@ -17,17 +17,17 @@ func resourceIP4Address() *schema.Resource {
 		Delete: resourceIP4AddressDelete,
 
 		Schema: map[string]*schema.Schema{
-			"configuration_id": &schema.Schema{
+			"configuration_id": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
 			},
-			"parent_id": &schema.Schema{
+			"parent_id": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
 			},
-			"mac_address": &schema.Schema{
+			"mac_address": {
 				Type:     schema.TypeString,
 				Optional: true,
 				Default:  "",
@@ -38,34 +38,34 @@ func resourceIP4Address() *schema.Resource {
 			// 	Optional: true,
 			// 	Default:  "",
 			// },
-			"action": &schema.Schema{
+			"action": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				Default:      "MAKE_STATIC",
 				ForceNew:     true,
 				ValidateFunc: validation.StringInSlice(gobam.IPAssignmentActions, false),
 			},
-			"name": &schema.Schema{
+			"name": {
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			"address": &schema.Schema{
+			"address": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"properties": &schema.Schema{
+			"properties": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"state": &schema.Schema{
+			"state": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"type": &schema.Schema{
+			"type": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"custom_properties": &schema.Schema{
+			"custom_properties": {
 				Type:     schema.TypeMap,
 				Optional: true,
 			},
@@ -75,11 +75,7 @@ func resourceIP4Address() *schema.Resource {
 
 func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	configID, err := strconv.ParseInt(d.Get("configuration_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert configuration_id from string to int64"); err != nil {
@@ -128,11 +124,7 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 
 func resourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
@@ -181,11 +173,7 @@ func resourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 
 func resourceIP4AddressUpdate(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
@@ -234,11 +222,7 @@ func resourceIP4AddressUpdate(d *schema.ResourceData, meta interface{}) error {
 
 func resourceIP4AddressDelete(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {

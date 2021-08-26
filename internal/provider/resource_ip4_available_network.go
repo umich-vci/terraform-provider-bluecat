@@ -1,4 +1,4 @@
-package bluecat
+package provider
 
 import (
 	"hash/crc64"
@@ -16,7 +16,7 @@ func resourceIP4AvailableNetwork() *schema.Resource {
 		Read:   schema.Noop,
 		Delete: schema.RemoveFromState,
 		Schema: map[string]*schema.Schema{
-			"network_id_list": &schema.Schema{
+			"network_id_list": {
 				Type:     schema.TypeList,
 				Required: true,
 				ForceNew: true,
@@ -40,7 +40,7 @@ func resourceIP4AvailableNetwork() *schema.Resource {
 				Optional: true,
 				ForceNew: true,
 			},
-			"network_id": &schema.Schema{
+			"network_id": {
 				Type:     schema.TypeInt,
 				Computed: true,
 			},
@@ -49,11 +49,7 @@ func resourceIP4AvailableNetwork() *schema.Resource {
 }
 func resourceIP4AvailableNetworkCreate(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	result := -1
 

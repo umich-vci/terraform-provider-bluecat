@@ -1,4 +1,4 @@
-package bluecat
+package provider
 
 import (
 	"log"
@@ -13,35 +13,35 @@ func dataSourceIP4Address() *schema.Resource {
 	return &schema.Resource{
 		Read: dataSourceIP4AddressRead,
 		Schema: map[string]*schema.Schema{
-			"container_id": &schema.Schema{
+			"container_id": {
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			"address": &schema.Schema{
+			"address": {
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			"name": &schema.Schema{
+			"name": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"properties": &schema.Schema{
+			"properties": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"type": &schema.Schema{
+			"type": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"state": &schema.Schema{
+			"state": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"mac_address": &schema.Schema{
+			"mac_address": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"custom_properties": &schema.Schema{
+			"custom_properties": {
 				Type:     schema.TypeMap,
 				Computed: true,
 			},
@@ -51,11 +51,7 @@ func dataSourceIP4Address() *schema.Resource {
 
 func dataSourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	containerID, err := strconv.ParseInt(d.Get("container_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert container_id from string to int64"); err != nil {

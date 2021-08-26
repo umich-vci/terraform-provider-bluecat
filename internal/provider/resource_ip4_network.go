@@ -1,4 +1,4 @@
-package bluecat
+package provider
 
 import (
 	"log"
@@ -16,21 +16,21 @@ func resourceIP4Network() *schema.Resource {
 		Update: resourceIP4NetworkUpdate,
 		Delete: resourceIP4NetworkDelete,
 		Schema: map[string]*schema.Schema{
-			"parent_id": &schema.Schema{
+			"parent_id": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
 			},
-			"name": &schema.Schema{
+			"name": {
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			"size": &schema.Schema{
+			"size": {
 				Type:     schema.TypeInt,
 				Required: true,
 				ForceNew: true,
 			},
-			"is_larger_allowed": &schema.Schema{
+			"is_larger_allowed": {
 				Type:     schema.TypeBool,
 				Optional: true,
 				Default:  false,
@@ -47,65 +47,65 @@ func resourceIP4Network() *schema.Resource {
 			// 	Optional: true,
 			// 	Default:  true,
 			// },
-			"traversal_method": &schema.Schema{
+			"traversal_method": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				Default:      "NO_TRAVERSAL",
 				ValidateFunc: validation.StringInSlice([]string{"NO_TRAVERSAL", "DEPTH_FIRST", "BREADTH_FIRST"}, false),
 			},
-			"properties": &schema.Schema{
+			"properties": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"type": &schema.Schema{
+			"type": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"cidr": &schema.Schema{
+			"cidr": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"allow_duplicate_host": &schema.Schema{
+			"allow_duplicate_host": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"inherit_allow_duplicate_host": &schema.Schema{
+			"inherit_allow_duplicate_host": {
 				Type:     schema.TypeBool,
 				Computed: true,
 			},
-			"ping_before_assign": &schema.Schema{
+			"ping_before_assign": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"inherit_ping_before_assign": &schema.Schema{
+			"inherit_ping_before_assign": {
 				Type:     schema.TypeBool,
 				Computed: true,
 			},
-			"gateway": &schema.Schema{
+			"gateway": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"inherit_default_domains": &schema.Schema{
+			"inherit_default_domains": {
 				Type:     schema.TypeBool,
 				Computed: true,
 			},
-			"default_view": &schema.Schema{
+			"default_view": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"inherit_default_view": &schema.Schema{
+			"inherit_default_view": {
 				Type:     schema.TypeBool,
 				Computed: true,
 			},
-			"inherit_dns_restrictions": &schema.Schema{
+			"inherit_dns_restrictions": {
 				Type:     schema.TypeBool,
 				Computed: true,
 			},
-			"addresses_in_use": &schema.Schema{
+			"addresses_in_use": {
 				Type:     schema.TypeInt,
 				Computed: true,
 			},
-			"addresses_free": &schema.Schema{
+			"addresses_free": {
 				Type:     schema.TypeInt,
 				Computed: true,
 			},
@@ -114,11 +114,7 @@ func resourceIP4Network() *schema.Resource {
 }
 func resourceIP4NetworkCreate(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	parentID, err := strconv.ParseInt(d.Get("parent_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
@@ -175,11 +171,7 @@ func resourceIP4NetworkCreate(d *schema.ResourceData, meta interface{}) error {
 
 func resourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
@@ -249,11 +241,7 @@ func resourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 
 func resourceIP4NetworkUpdate(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
@@ -290,11 +278,7 @@ func resourceIP4NetworkUpdate(d *schema.ResourceData, meta interface{}) error {
 
 func resourceIP4NetworkDelete(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {

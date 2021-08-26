@@ -1,4 +1,4 @@
-package bluecat
+package provider
 
 import (
 	"fmt"
@@ -14,59 +14,59 @@ func dataSourceHostRecord() *schema.Resource {
 	return &schema.Resource{
 		Read: dataSourceHostRecordRead,
 		Schema: map[string]*schema.Schema{
-			"start": &schema.Schema{
+			"start": {
 				Type:     schema.TypeInt,
 				Optional: true,
 				Default:  0,
 			},
-			"result_count": &schema.Schema{
+			"result_count": {
 				Type:     schema.TypeInt,
 				Optional: true,
 				Default:  10,
 			},
-			"absolute_name": &schema.Schema{
+			"absolute_name": {
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			"name": &schema.Schema{
+			"name": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"properties": &schema.Schema{
+			"properties": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"type": &schema.Schema{
+			"type": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"parent_id": &schema.Schema{
+			"parent_id": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"parent_type": &schema.Schema{
+			"parent_type": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"reverse_record": &schema.Schema{
+			"reverse_record": {
 				Type:     schema.TypeBool,
 				Computed: true,
 			},
-			"addresses": &schema.Schema{
+			"addresses": {
 				Type:     schema.TypeSet,
 				Computed: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
-			"address_ids": &schema.Schema{
+			"address_ids": {
 				Type:     schema.TypeSet,
 				Computed: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
-			"custom_properties": &schema.Schema{
+			"custom_properties": {
 				Type:     schema.TypeMap,
 				Computed: true,
 			},
-			"ttl": &schema.Schema{
+			"ttl": {
 				Type:     schema.TypeInt,
 				Computed: true,
 			},
@@ -76,11 +76,7 @@ func dataSourceHostRecord() *schema.Resource {
 
 func dataSourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	start := d.Get("start").(int)
 	count := d.Get("result_count").(int)
@@ -113,7 +109,7 @@ func dataSourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	if matches == 0 || matches > 1 {
-		err := fmt.Errorf("No exact host record match found for: %s", absoluteName)
+		err := fmt.Errorf("no exact host record match found for: %s", absoluteName)
 		if err = gobam.LogoutClientIfError(client, err, "No exact host record match found for hint"); err != nil {
 			mutex.Unlock()
 			return err
@@ -185,7 +181,7 @@ func parseHostRecordProperties(properties string) (hostRecordProperties, error) 
 			case "reverseRecord":
 				b, err := strconv.ParseBool(val)
 				if err != nil {
-					return hrProperties, fmt.Errorf("Error parsing reverseRecord to bool")
+					return hrProperties, fmt.Errorf("error parsing reverseRecord to bool")
 				}
 				hrProperties.reverseRecord = b
 			case "addresses":
@@ -201,7 +197,7 @@ func parseHostRecordProperties(properties string) (hostRecordProperties, error) 
 			case "ttl":
 				ttlval, err := strconv.Atoi(val)
 				if err != nil {
-					return hrProperties, fmt.Errorf("Error parsing ttl to int")
+					return hrProperties, fmt.Errorf("error parsing ttl to int")
 				}
 				hrProperties.ttl = ttlval
 			default:

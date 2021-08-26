@@ -1,4 +1,4 @@
-package bluecat
+package provider
 
 import (
 	"log"
@@ -16,53 +16,53 @@ func resourceHostRecord() *schema.Resource {
 		Update: resourceHostRecordUpdate,
 		Delete: resourceHostRecordDelete,
 		Schema: map[string]*schema.Schema{
-			"view_id": &schema.Schema{
+			"view_id": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
 			},
-			"name": &schema.Schema{
+			"name": {
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			"dns_zone": &schema.Schema{
+			"dns_zone": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
 			},
-			"addresses": &schema.Schema{
+			"addresses": {
 				Type:     schema.TypeSet,
 				Required: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
-			"ttl": &schema.Schema{
+			"ttl": {
 				Type:     schema.TypeInt,
 				Optional: true,
 				Default:  -1,
 			},
-			"reverse_record": &schema.Schema{
+			"reverse_record": {
 				Type:     schema.TypeBool,
 				Optional: true,
 				Default:  true,
 			},
-			"comments": &schema.Schema{
+			"comments": {
 				Type:     schema.TypeString,
 				Optional: true,
 				Default:  "",
 			},
-			"properties": &schema.Schema{
+			"properties": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"type": &schema.Schema{
+			"type": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"absolute_name": &schema.Schema{
+			"absolute_name": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"custom_properties": &schema.Schema{
+			"custom_properties": {
 				Type:     schema.TypeMap,
 				Optional: true,
 				Elem: &schema.Schema{
@@ -75,11 +75,7 @@ func resourceHostRecord() *schema.Resource {
 
 func resourceHostRecordCreate(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	viewID, err := strconv.ParseInt(d.Get("view_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert view_id from string to int64"); err != nil {
@@ -124,11 +120,7 @@ func resourceHostRecordCreate(d *schema.ResourceData, meta interface{}) error {
 
 func resourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
@@ -183,11 +175,7 @@ func resourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 
 func resourceHostRecordUpdate(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
@@ -238,11 +226,7 @@ func resourceHostRecordUpdate(d *schema.ResourceData, meta interface{}) error {
 
 func resourceHostRecordDelete(d *schema.ResourceData, meta interface{}) error {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
