@@ -30,7 +30,7 @@ func dataSourceEntity() *schema.Resource {
 				ValidateFunc: validation.StringInSlice(gobam.ObjectTypes, false),
 			},
 			"parent_id": {
-				Description: "The object ID of the parent object that contains the entity. Defaults to 0 which is where Configurations are stored.",
+				Description: "The object ID of the parent object that contains the entity. Configurations are stored in ID `0`.",
 				Type:        schema.TypeString,
 				Optional:    true,
 				Default:     0,
