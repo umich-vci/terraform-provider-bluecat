@@ -13,7 +13,7 @@ import (
 
 func resourceIP4Address() *schema.Resource {
 	return &schema.Resource{
-		Description: "",
+		Description: "Resource to reserve an IPv4 address.",
 
 		CreateContext: resourceIP4AddressCreate,
 		ReadContext:   resourceIP4AddressRead,
@@ -22,67 +22,60 @@ func resourceIP4Address() *schema.Resource {
 
 		Schema: map[string]*schema.Schema{
 			"configuration_id": {
-				Description: "",
+				Description: "The object ID of the Configuration that will hold the new address. If changed, forces a new resource.",
 				Type:        schema.TypeString,
 				Required:    true,
 				ForceNew:    true,
+			},
+			"name": {
+				Description: "The name assigned to the IPv4 address. This is not related to DNS.",
+				Type:        schema.TypeString,
+				Required:    true,
 			},
 			"parent_id": {
-				Description: "",
+				Description: "The object ID of the Configuration, Block, or Network to find the next available IPv4 address in. If changed, forces a new resource.",
 				Type:        schema.TypeString,
 				Required:    true,
 				ForceNew:    true,
 			},
-			"mac_address": {
-				Description: "",
-				Type:        schema.TypeString,
-				Optional:    true,
-				Default:     "",
-			},
-			// host records should be created in a separate resource
-			// "host_info": {
-			// 	Description: "",
-			// 	Type:        schema.TypeString,
-			// 	Optional:    true,
-			// 	Default:     "",
-			// },
 			"action": {
-				Description:  "",
+				Description:  "The action to take on the next available IPv4 address.  Must be one of: \"MAKE_STATIC\", \"MAKE_RESERVED\", or \"MAKE_DHCP_RESERVED\". If changed, forces a new resource.",
 				Type:         schema.TypeString,
 				Optional:     true,
 				Default:      "MAKE_STATIC",
 				ForceNew:     true,
 				ValidateFunc: validation.StringInSlice(gobam.IPAssignmentActions, false),
 			},
-			"name": {
-				Description: "",
+			"custom_properties": {
+				Description: "A map of all custom properties associated with the IPv4 address.",
+				Type:        schema.TypeMap,
+				Optional:    true,
+			},
+			"mac_address": {
+				Description: "The MAC address to associate with the IPv4 address.",
 				Type:        schema.TypeString,
-				Required:    true,
+				Optional:    true,
+				Default:     "",
 			},
 			"address": {
-				Description: "",
+				Description: "The IPv4 address that was allocated.",
 				Type:        schema.TypeString,
 				Computed:    true,
 			},
 			"properties": {
-				Description: "",
+				Description: "The properties of the IPv4 address as returned by the API (pipe delimited).",
 				Type:        schema.TypeString,
 				Computed:    true,
 			},
 			"state": {
-				Description: "",
+				Description: "The state of the IPv4 address.",
 				Type:        schema.TypeString,
 				Computed:    true,
 			},
 			"type": {
-				Description: "",
+				Description: "The type of the resource.",
 				Type:        schema.TypeString,
 				Computed:    true,
-			},
-			"custom_properties": {
-				Description: "",
-				Type:        schema.TypeMap,
-				Optional:    true,
 			},
 		},
 	}

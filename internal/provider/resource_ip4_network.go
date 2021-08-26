@@ -13,7 +13,7 @@ import (
 
 func resourceIP4Network() *schema.Resource {
 	return &schema.Resource{
-		Description: "",
+		Description: "Resource to create an IPv4 network.",
 
 		CreateContext: resourceIP4NetworkCreate,
 		ReadContext:   resourceIP4NetworkRead,
@@ -21,118 +21,104 @@ func resourceIP4Network() *schema.Resource {
 		DeleteContext: resourceIP4NetworkDelete,
 
 		Schema: map[string]*schema.Schema{
+			"name": {
+				Description: "The display name of the IPv4 network.",
+				Type:        schema.TypeString,
+				Required:    true,
+			},
 			"parent_id": {
-				Description: "",
+				Description: "The object ID of the parent object that will contain the new IPv4 network. If this argument is changed, then the resource will be recreated.",
 				Type:        schema.TypeString,
 				Required:    true,
 				ForceNew:    true,
 			},
-			"name": {
-				Description: "",
-				Type:        schema.TypeString,
-				Required:    true,
-			},
 			"size": {
-				Description: "",
+				Description: "The size of the IPv4 network expressed as a power of 2. For example, 256 would create a /24. If this argument is changed, then the resource will be recreated.",
 				Type:        schema.TypeInt,
 				Required:    true,
 				ForceNew:    true,
 			},
 			"is_larger_allowed": {
-				Description: "",
+				Description: "(Optional) Is it ok to return a network that is larger than the size specified?",
 				Type:        schema.TypeBool,
 				Optional:    true,
 				Default:     false,
 			},
-			// We don't want to touch resources created outside of Terraform so always assume false
-			// "reuse_existing": {
-			// 	Description: "",
-			// 	Type:        schema.TypeBool,
-			// 	Optional:    true,
-			// 	Default:     false,
-			// },
-			// We don't use auto_create since we will always want to create a network
-			// "auto_create": {
-			// 	Description: "",
-			// 	Type:        schema.TypeBool,
-			// 	Optional:    true,
-			// 	Default:     true,
-			// },
 			"traversal_method": {
-				Description:  "",
+				Description:  "The traversal method used to find the range to allocate the network. Must be one of \"NO_TRAVERSAL\", \"DEPTH_FIRST\", or \"BREADTH_FIRST\".",
 				Type:         schema.TypeString,
 				Optional:     true,
 				Default:      "NO_TRAVERSAL",
 				ValidateFunc: validation.StringInSlice([]string{"NO_TRAVERSAL", "DEPTH_FIRST", "BREADTH_FIRST"}, false),
 			},
-			"properties": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"type": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"cidr": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"allow_duplicate_host": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"inherit_allow_duplicate_host": {
-				Description: "",
-				Type:        schema.TypeBool,
-				Computed:    true,
-			},
-			"ping_before_assign": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"inherit_ping_before_assign": {
-				Description: "",
-				Type:        schema.TypeBool,
-				Computed:    true,
-			},
-			"gateway": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"inherit_default_domains": {
-				Description: "",
-				Type:        schema.TypeBool,
-				Computed:    true,
-			},
-			"default_view": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"inherit_default_view": {
-				Description: "",
-				Type:        schema.TypeBool,
-				Computed:    true,
-			},
-			"inherit_dns_restrictions": {
-				Description: "",
-				Type:        schema.TypeBool,
-				Computed:    true,
-			},
 			"addresses_in_use": {
-				Description: "",
+				Description: "The number of addresses allocated/in use on the network.",
 				Type:        schema.TypeInt,
 				Computed:    true,
 			},
 			"addresses_free": {
-				Description: "",
+				Description: "The number of addresses unallocated/free on the network.",
 				Type:        schema.TypeInt,
+				Computed:    true,
+			},
+			"allow_duplicate_host": {
+				Description: "Duplicate host names check.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"cidr": {
+				Description: "The CIDR address of the IPv4 network.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"default_view": {
+				Description: "The object id of the default DNS View for the network.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"gateway": {
+				Description: "The gateway of the IPv4 network.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"inherit_allow_duplicate_host": {
+				Description: "Duplicate host names check is inherited.",
+				Type:        schema.TypeBool,
+				Computed:    true,
+			},
+			"inherit_default_domains": {
+				Description: "Default domains are inherited.",
+				Type:        schema.TypeBool,
+				Computed:    true,
+			},
+			"inherit_default_view": {
+				Description: "The default DNS Viewis inherited.",
+				Type:        schema.TypeBool,
+				Computed:    true,
+			},
+			"inherit_dns_restrictions": {
+				Description: "DNS restrictions are inherited.",
+				Type:        schema.TypeBool,
+				Computed:    true,
+			},
+			"inherit_ping_before_assign": {
+				Description: "The network pings an address before assignment is inherited.",
+				Type:        schema.TypeBool,
+				Computed:    true,
+			},
+			"ping_before_assign": {
+				Description: "The network pings an address before assignment.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"properties": {
+				Description: "The properties of the resource as returned by the API (pipe delimited).",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"type": {
+				Description: "The type of the resource.",
+				Type:        schema.TypeString,
 				Computed:    true,
 			},
 		},

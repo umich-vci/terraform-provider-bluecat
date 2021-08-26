@@ -13,49 +13,49 @@ import (
 
 func dataSourceIP4Address() *schema.Resource {
 	return &schema.Resource{
-		Description: "",
+		Description: "Data source to access the attributes of an IPv4 address.",
 
 		ReadContext: dataSourceIP4AddressRead,
 
 		Schema: map[string]*schema.Schema{
-			"container_id": {
-				Description: "",
+			"address": {
+				Description: "The IPv4 address to get data for.",
 				Type:        schema.TypeString,
 				Required:    true,
 			},
-			"address": {
-				Description: "",
+			"container_id": {
+				Description: "The object ID of the container that has the specified `address`.  This can be a Configuration, IPv4 Block, IPv4 Network, or DHCP range.",
 				Type:        schema.TypeString,
 				Required:    true,
+			},
+			"custom_properties": {
+				Description: "A map of all custom properties associated with the IPv4 address.",
+				Type:        schema.TypeMap,
+				Computed:    true,
+			},
+			"mac_address": {
+				Description: "The MAC address associated with the IPv4 address.",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"name": {
-				Description: "",
+				Description: "The name assigned to the IPv4 address.  This is not related to DNS.",
 				Type:        schema.TypeString,
 				Computed:    true,
 			},
 			"properties": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"type": {
-				Description: "",
+				Description: "The properties of the IPv4 address as returned by the API (pipe delimited).",
 				Type:        schema.TypeString,
 				Computed:    true,
 			},
 			"state": {
-				Description: "",
+				Description: "The state of the IPv4 address.",
 				Type:        schema.TypeString,
 				Computed:    true,
 			},
-			"mac_address": {
-				Description: "",
+			"type": {
+				Description: "The type of the resource.",
 				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"custom_properties": {
-				Description: "",
-				Type:        schema.TypeMap,
 				Computed:    true,
 			},
 		},

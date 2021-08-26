@@ -13,30 +13,30 @@ import (
 
 func dataSourceEntity() *schema.Resource {
 	return &schema.Resource{
-		Description: "",
+		Description: "Data source to access the attributes of a BlueCat entity.",
 
 		ReadContext: dataSourceEntityRead,
 
 		Schema: map[string]*schema.Schema{
-			"parent_id": {
-				Description: "",
-				Type:        schema.TypeString,
-				Optional:    true,
-				Default:     0,
-			},
 			"name": {
-				Description: "",
+				Description: "The name of the entity to find.",
 				Type:        schema.TypeString,
 				Required:    true,
 			},
 			"type": {
-				Description:  "",
+				Description:  "The type of the entity you want to retrieve.",
 				Type:         schema.TypeString,
 				Required:     true,
 				ValidateFunc: validation.StringInSlice(gobam.ObjectTypes, false),
 			},
+			"parent_id": {
+				Description: "The object ID of the parent object that contains the entity. Defaults to 0 which is where Configurations are stored.",
+				Type:        schema.TypeString,
+				Optional:    true,
+				Default:     0,
+			},
 			"properties": {
-				Description: "",
+				Description: "The properties of the entity as returned by the API (pipe delimited).",
 				Type:        schema.TypeString,
 				Computed:    true,
 			},

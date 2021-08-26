@@ -16,105 +16,128 @@ import (
 
 func dataSourceIP4Network() *schema.Resource {
 	return &schema.Resource{
-		Description: "",
+		Description: "Data source to access the attributes of an IPv4 network, IPv4 Block, or DHCPv4 Range.",
 
 		ReadContext: dataSourceIP4NetworkRead,
 
 		Schema: map[string]*schema.Schema{
+			"address": {
+				Description: "IP address to find the IPv4 network, IPv4 Block, or DHCPv4 Range of.",
+				Type:        schema.TypeString,
+				Required:    true,
+			},
 			"container_id": {
-				Type:     schema.TypeString,
-				Required: true,
+				Description: "The object ID of a container that contains the specified IPv4 network, block, or range.",
+				Type:        schema.TypeString,
+				Required:    true,
 			},
 			"type": {
+				Description:  "Must be \"IP4Block\", \"IP4Network\", \"DHCP4Range\", or \"\". \"\" will find the most specific container.",
 				Type:         schema.TypeString,
 				Required:     true,
 				ValidateFunc: validation.StringInSlice([]string{"IP4Block", "IP4Network", "DHCP4Range", ""}, false),
 			},
-			"address": {
-				Type:     schema.TypeString,
-				Required: true,
-			},
-			"name": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"properties": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"cidr": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"template": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"gateway": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"default_domains": {
-				Type:     schema.TypeSet,
-				Computed: true,
-				Elem:     &schema.Schema{Type: schema.TypeString},
-			},
-			"default_view": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"dns_restrictions": {
-				Type:     schema.TypeSet,
-				Computed: true,
-				Elem:     &schema.Schema{Type: schema.TypeString},
-			},
-			"allow_duplicate_host": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"ping_before_assign": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"inherit_allow_duplicate_host": {
-				Type:     schema.TypeBool,
-				Computed: true,
-			},
-			"inherit_ping_before_assign": {
-				Type:     schema.TypeBool,
-				Computed: true,
-			},
-			"inherit_dns_restrictions": {
-				Type:     schema.TypeBool,
-				Computed: true,
-			},
-			"inherit_default_domains": {
-				Type:     schema.TypeBool,
-				Computed: true,
-			},
-			"inherit_default_view": {
-				Type:     schema.TypeBool,
-				Computed: true,
-			},
-			"location_code": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"location_inherited": {
-				Type:     schema.TypeBool,
-				Computed: true,
+			"addresses_free": {
+				Description: "The number of addresses unallocated/free on the network.",
+				Type:        schema.TypeInt,
+				Computed:    true,
 			},
 			"addresses_in_use": {
-				Type:     schema.TypeInt,
-				Computed: true,
+				Description: "The number of addresses allocated/in use on the network.",
+				Type:        schema.TypeInt,
+				Computed:    true,
 			},
-			"addresses_free": {
-				Type:     schema.TypeInt,
-				Computed: true,
+			"allow_duplicate_host": {
+				Description: "Duplicate host names check.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"cidr": {
+				Description: "The CIDR address of the IPv4 network.",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"custom_properties": {
-				Type:     schema.TypeMap,
-				Computed: true,
+				Description: "A map of all custom properties associated with the IPv4 network.",
+				Type:        schema.TypeMap,
+				Computed:    true,
+			},
+			"default_domains": {
+				Description: "TODO",
+				Type:        schema.TypeSet,
+				Computed:    true,
+				Elem:        &schema.Schema{Type: schema.TypeString},
+			},
+			"default_view": {
+				Description: "The object id of the default DNS View for the network.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"dns_restrictions": {
+				Description: "TODO",
+				Type:        schema.TypeSet,
+				Computed:    true,
+				Elem:        &schema.Schema{Type: schema.TypeString},
+			},
+			"gateway": {
+				Description: "The gateway of the IPv4 network.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"inherit_allow_duplicate_host": {
+				Description: "Duplicate host names check is inherited.",
+				Type:        schema.TypeBool,
+				Computed:    true,
+			},
+			"inherit_default_domains": {
+				Description: "Default domains are inherited.",
+				Type:        schema.TypeBool,
+				Computed:    true,
+			},
+			"inherit_default_view": {
+				Description: "The default DNS View is inherited.",
+				Type:        schema.TypeBool,
+				Computed:    true,
+			},
+			"inherit_dns_restrictions": {
+				Description: "DNS restrictions are inherited.",
+				Type:        schema.TypeBool,
+				Computed:    true,
+			},
+			"inherit_ping_before_assign": {
+				Description: "The network pings an address before assignment is inherited.",
+				Type:        schema.TypeBool,
+				Computed:    true,
+			},
+			"location_code": {
+				Description: "TODO",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"location_inherited": {
+				Description: "TODO",
+				Type:        schema.TypeBool,
+				Computed:    true,
+			},
+			"name": {
+				Description: "The name assigned the resource.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"ping_before_assign": {
+				Description: "The network pings an address before assignment.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"properties": {
+				Description: "The properties of the resource as returned by the API (pipe delimited).",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"template": {
+				Description: "TODO",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 		},
 	}

@@ -14,7 +14,7 @@ import (
 
 func resourceIP4AvailableNetwork() *schema.Resource {
 	return &schema.Resource{
-		Description: "",
+		Description: "Resource to select an IPv4 network from a list of networks based on availability of IP addresses.",
 
 		CreateContext: resourceIP4AvailableNetworkCreate,
 		ReadContext:   schema.NoopContext,
@@ -22,32 +22,37 @@ func resourceIP4AvailableNetwork() *schema.Resource {
 
 		Schema: map[string]*schema.Schema{
 			"network_id_list": {
-				Type:     schema.TypeList,
-				Required: true,
-				ForceNew: true,
+				Description: "A list of Network IDs to search for a free IP address. By default, the address with the most free addresses will be returned. See the `random` argument for another selection method. The resource will be recreated if the network_id_list is changed. You may want to use a `lifecycle` customization to ignore changes to the list after resource creation so that a new network is not selected if the list is changed.",
+				Type:        schema.TypeList,
+				Required:    true,
+				ForceNew:    true,
 				Elem: &schema.Schema{
 					Type: schema.TypeInt,
 				},
 			},
 			"keepers": {
-				Type:     schema.TypeMap,
-				Optional: true,
-				ForceNew: true,
+				Description: "An arbitrary map of values. If this argument is changed, then the resource will be recreated.",
+				Type:        schema.TypeMap,
+				Optional:    true,
+				ForceNew:    true,
 			},
 			"random": {
-				Type:     schema.TypeBool,
-				Optional: true,
-				Default:  false,
-				ForceNew: true,
+				Description: "By default, the network with the most free IP addresses is returned. By setting this to `true` a random network from the list will be returned instead. The network will be validated to have at least 1 free IP address.",
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Default:     false,
+				ForceNew:    true,
 			},
 			"seed": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
+				Description: "A seed for the `random` argument's generator. Can be used to try to get more predictable results from the random selection. The results will not be fixed however.",
+				Type:        schema.TypeString,
+				Optional:    true,
+				ForceNew:    true,
 			},
 			"network_id": {
-				Type:     schema.TypeInt,
-				Computed: true,
+				Description: "The network ID of the network selected by the resource.",
+				Type:        schema.TypeInt,
+				Computed:    true,
 			},
 		},
 	}

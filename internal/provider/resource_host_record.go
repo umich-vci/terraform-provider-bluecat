@@ -13,7 +13,7 @@ import (
 
 func resourceHostRecord() *schema.Resource {
 	return &schema.Resource{
-		Description: "",
+		Description: "Resource create a host record.",
 
 		CreateContext: resourceHostRecordCreate,
 		ReadContext:   resourceHostRecordRead,
@@ -21,69 +21,69 @@ func resourceHostRecord() *schema.Resource {
 		DeleteContext: resourceHostRecordDelete,
 
 		Schema: map[string]*schema.Schema{
-			"view_id": {
-				Description: "",
+			"addresses": {
+				Description: "The address(es) to be associated with the host record.",
+				Type:        schema.TypeSet,
+				Required:    true,
+				Elem:        &schema.Schema{Type: schema.TypeString},
+			},
+			"dns_zone": {
+				Description: "The DNS zone to create the host record in. Combined with `name` to make the fqdn.  If changed, forces a new resource.",
 				Type:        schema.TypeString,
 				Required:    true,
 				ForceNew:    true,
 			},
 			"name": {
-				Description: "",
+				Description: "The name of the host record to be created. Combined with `dns_zone` to make the fqdn.",
 				Type:        schema.TypeString,
 				Required:    true,
 			},
-			"dns_zone": {
-				Description: "",
+			"view_id": {
+				Description: "The object ID of the View that host record should be created in. If changed, forces a new resource.",
 				Type:        schema.TypeString,
 				Required:    true,
 				ForceNew:    true,
 			},
-			"addresses": {
-				Description: "",
-				Type:        schema.TypeSet,
-				Required:    true,
-				Elem:        &schema.Schema{Type: schema.TypeString},
-			},
-			"ttl": {
-				Description: "",
-				Type:        schema.TypeInt,
-				Optional:    true,
-				Default:     -1,
-			},
-			"reverse_record": {
-				Description: "",
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     true,
-			},
 			"comments": {
-				Description: "",
+				Description: "Comments to be associated with the host record.",
 				Type:        schema.TypeString,
 				Optional:    true,
 				Default:     "",
 			},
-			"properties": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"type": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"absolute_name": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
 			"custom_properties": {
-				Description: "",
+				Description: "A map of all custom properties associated with the host record.",
 				Type:        schema.TypeMap,
 				Optional:    true,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
+			},
+			"reverse_record": {
+				Description: "If a reverse record should be created for addresses.",
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Default:     true,
+			},
+			"ttl": {
+				Description: "The TTL for the host record.  When set to -1, ignores the TTL.",
+				Type:        schema.TypeInt,
+				Optional:    true,
+				Default:     -1,
+			},
+			"absolute_name": {
+				Description: "The absolute name (fqdn) of the host record.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"properties": {
+				Description: "The properties of the host record as returned by the API (pipe delimited).",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"type": {
+				Description: "The type of the resource.",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 		},
 	}

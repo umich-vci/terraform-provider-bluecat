@@ -14,78 +14,78 @@ import (
 
 func dataSourceHostRecord() *schema.Resource {
 	return &schema.Resource{
-		Description: "",
+		Description: "Data source to access the attributes of a host record. If the API returns more than one host record that matches, an error will be returned.",
 
 		ReadContext: dataSourceHostRecordRead,
 
 		Schema: map[string]*schema.Schema{
-			"start": {
-				Description: "",
-				Type:        schema.TypeInt,
-				Optional:    true,
-				Default:     0,
+			"absolute_name": {
+				Description: "The absolute name/fqdn of the host record.",
+				Type:        schema.TypeString,
+				Required:    true,
 			},
 			"result_count": {
-				Description: "",
+				Description: "The number of results the API should return. This must be between 1 and 10.  You most likely want to leave this alone.",
 				Type:        schema.TypeInt,
 				Optional:    true,
 				Default:     10,
 			},
-			"absolute_name": {
-				Description: "",
-				Type:        schema.TypeString,
-				Required:    true,
-			},
-			"name": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"properties": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"type": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"parent_id": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"parent_type": {
-				Description: "",
-				Type:        schema.TypeString,
-				Computed:    true,
-			},
-			"reverse_record": {
-				Description: "",
-				Type:        schema.TypeBool,
-				Computed:    true,
+			"start": {
+				Description: "The start index of the search results the API should return. You most likely want to leave this alone.",
+				Type:        schema.TypeInt,
+				Optional:    true,
+				Default:     0,
 			},
 			"addresses": {
-				Description: "",
+				Description: "A set of all addresses associated with the host record.",
 				Type:        schema.TypeSet,
 				Computed:    true,
 				Elem:        &schema.Schema{Type: schema.TypeString},
 			},
 			"address_ids": {
-				Description: "",
+				Description: "A set of all address ids associated with the host record.",
 				Type:        schema.TypeSet,
 				Computed:    true,
 				Elem:        &schema.Schema{Type: schema.TypeString},
 			},
 			"custom_properties": {
-				Description: "",
+				Description: "A map of all custom properties associated with the host record.",
 				Type:        schema.TypeMap,
 				Computed:    true,
 			},
+			"name": {
+				Description: "The short name of the host record.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"parent_id": {
+				Description: "The ID of the parent of the host record.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"parent_type": {
+				Description: "The type of the parent of the host record.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"properties": {
+				Description: "The properties of the host record as returned by the API (pipe delimited).",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"reverse_record": {
+				Description: "A boolean that represents if the host record should set reverse records.",
+				Type:        schema.TypeBool,
+				Computed:    true,
+			},
 			"ttl": {
-				Description: "",
+				Description: "The TTL of the host record.",
 				Type:        schema.TypeInt,
+				Computed:    true,
+			},
+			"type": {
+				Description: "The type of the resource.",
+				Type:        schema.TypeString,
 				Computed:    true,
 			},
 		},
