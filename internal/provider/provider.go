@@ -32,30 +32,30 @@ func New(version string) func() *schema.Provider {
 	return func() *schema.Provider {
 		p := &schema.Provider{
 			Schema: map[string]*schema.Schema{
-				"username": {
+				"bluecat_endpoint": {
 					Type:        schema.TypeString,
 					Required:    true,
-					DefaultFunc: schema.EnvDefaultFunc("BLUECAT_USERNAME", nil),
-					Description: "A BlueCat Address Manager username.",
+					DefaultFunc: schema.EnvDefaultFunc("BLUECAT_ENDPOINT", nil),
+					Description: "The BlueCat Address Manager endpoint hostname. Can also use the environment variable `BLUECAT_ENDPOINT`",
 				},
 				"password": {
 					Type:        schema.TypeString,
 					Required:    true,
 					Sensitive:   true,
 					DefaultFunc: schema.EnvDefaultFunc("BLUECAT_PASSWORD", nil),
-					Description: "The BlueCat Address Manager password.",
+					Description: "The BlueCat Address Manager password. Can also use the environment variable `BLUECAT_PASSWORD`",
 				},
-				"bluecat_endpoint": {
+				"username": {
 					Type:        schema.TypeString,
 					Required:    true,
-					DefaultFunc: schema.EnvDefaultFunc("BLUECAT_ENDPOINT", nil),
-					Description: "The BlueCat Address Manager endpoint hostname",
+					DefaultFunc: schema.EnvDefaultFunc("BLUECAT_USERNAME", nil),
+					Description: "A BlueCat Address Manager username. Can also use the environment variable `BLUECAT_USERNAME`",
 				},
 				"ssl_verify": {
 					Type:        schema.TypeBool,
 					Optional:    true,
 					Default:     true,
-					Description: "Verify the SSL certificate of the BlueCat Address Manager endpoint",
+					Description: "Verify the SSL certificate of the BlueCat Address Manager endpoint?",
 				},
 			},
 
