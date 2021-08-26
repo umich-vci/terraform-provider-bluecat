@@ -1,70 +1,86 @@
 package provider
 
 import (
+	"context"
 	"log"
 	"strconv"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/umich-vci/gobam"
 )
 
 func resourceHostRecord() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceHostRecordCreate,
-		Read:   resourceHostRecordRead,
-		Update: resourceHostRecordUpdate,
-		Delete: resourceHostRecordDelete,
+		Description: "",
+
+		CreateContext: resourceHostRecordCreate,
+		ReadContext:   resourceHostRecordRead,
+		UpdateContext: resourceHostRecordUpdate,
+		DeleteContext: resourceHostRecordDelete,
+
 		Schema: map[string]*schema.Schema{
 			"view_id": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Required:    true,
+				ForceNew:    true,
 			},
 			"name": {
-				Type:     schema.TypeString,
-				Required: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Required:    true,
 			},
 			"dns_zone": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Required:    true,
+				ForceNew:    true,
 			},
 			"addresses": {
-				Type:     schema.TypeSet,
-				Required: true,
-				Elem:     &schema.Schema{Type: schema.TypeString},
+				Description: "",
+				Type:        schema.TypeSet,
+				Required:    true,
+				Elem:        &schema.Schema{Type: schema.TypeString},
 			},
 			"ttl": {
-				Type:     schema.TypeInt,
-				Optional: true,
-				Default:  -1,
+				Description: "",
+				Type:        schema.TypeInt,
+				Optional:    true,
+				Default:     -1,
 			},
 			"reverse_record": {
-				Type:     schema.TypeBool,
-				Optional: true,
-				Default:  true,
+				Description: "",
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Default:     true,
 			},
 			"comments": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Default:  "",
+				Description: "",
+				Type:        schema.TypeString,
+				Optional:    true,
+				Default:     "",
 			},
 			"properties": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"type": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"absolute_name": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"custom_properties": {
-				Type:     schema.TypeMap,
-				Optional: true,
+				Description: "",
+				Type:        schema.TypeMap,
+				Optional:    true,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
@@ -73,14 +89,14 @@ func resourceHostRecord() *schema.Resource {
 	}
 }
 
-func resourceHostRecordCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceHostRecordCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
 
 	viewID, err := strconv.ParseInt(d.Get("view_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert view_id from string to int64"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	absoluteName := d.Get("name").(string) + "." + d.Get("dns_zone").(string)
 	ttl := int64(d.Get("ttl").(int))
@@ -102,7 +118,7 @@ func resourceHostRecordCreate(d *schema.ResourceData, meta interface{}) error {
 	resp, err := client.AddHostRecord(viewID, absoluteName, strings.Join(addresses, ","), ttl, properties)
 	if err = gobam.LogoutClientIfError(client, err, "AddHostRecord failed"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	d.SetId(strconv.FormatInt(resp, 10))
@@ -110,28 +126,28 @@ func resourceHostRecordCreate(d *schema.ResourceData, meta interface{}) error {
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()
 
-	return resourceHostRecordRead(d, meta)
+	return resourceHostRecordRead(ctx, d, meta)
 }
 
-func resourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
+func resourceHostRecordRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	resp, err := client.GetEntityById(id)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get host record by Id"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	if *resp.Id == 0 {
@@ -139,7 +155,7 @@ func resourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 
 		if err := client.Logout(); err != nil {
 			mutex.Unlock()
-			return err
+			return diag.FromErr(err)
 		}
 
 		mutex.Unlock()
@@ -153,7 +169,7 @@ func resourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	hostRecordProperties, err := parseHostRecordProperties(*resp.Properties)
 	if err = gobam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	d.Set("absolute_name", hostRecordProperties.absoluteName)
@@ -165,7 +181,7 @@ func resourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()
@@ -173,14 +189,14 @@ func resourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	return nil
 }
 
-func resourceHostRecordUpdate(d *schema.ResourceData, meta interface{}) error {
+func resourceHostRecordUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	name := d.Get("name").(string)
 	otype := d.Get("type").(string)
@@ -210,40 +226,40 @@ func resourceHostRecordUpdate(d *schema.ResourceData, meta interface{}) error {
 	err = client.Update(&update)
 	if err = gobam.LogoutClientIfError(client, err, "Host Record Update failed"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()
 
-	return resourceHostRecordRead(d, meta)
+	return resourceHostRecordRead(ctx, d, meta)
 }
 
-func resourceHostRecordDelete(d *schema.ResourceData, meta interface{}) error {
+func resourceHostRecordDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	resp, err := client.GetEntityById(id)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get host record by Id"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	if *resp.Id == 0 {
 		if err := client.Logout(); err != nil {
 			mutex.Unlock()
-			return err
+			return diag.FromErr(err)
 		}
 
 		mutex.Unlock()
@@ -253,13 +269,13 @@ func resourceHostRecordDelete(d *schema.ResourceData, meta interface{}) error {
 	err = client.Delete(id)
 	if err = gobam.LogoutClientIfError(client, err, "Delete failed"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()

@@ -1,69 +1,82 @@
 package provider
 
 import (
+	"context"
 	"log"
 	"strconv"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/umich-vci/gobam"
 )
 
 func dataSourceIP4Address() *schema.Resource {
 	return &schema.Resource{
-		Read: dataSourceIP4AddressRead,
+		Description: "",
+
+		ReadContext: dataSourceIP4AddressRead,
+
 		Schema: map[string]*schema.Schema{
 			"container_id": {
-				Type:     schema.TypeString,
-				Required: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Required:    true,
 			},
 			"address": {
-				Type:     schema.TypeString,
-				Required: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Required:    true,
 			},
 			"name": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"properties": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"type": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"state": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"mac_address": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"custom_properties": {
-				Type:     schema.TypeMap,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeMap,
+				Computed:    true,
 			},
 		},
 	}
 }
 
-func dataSourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
+func dataSourceIP4AddressRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
 
 	containerID, err := strconv.ParseInt(d.Get("container_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert container_id from string to int64"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	address := d.Get("address").(string)
 
 	resp, err := client.GetIP4Address(containerID, address)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Address"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	d.SetId(strconv.FormatInt(*resp.Id, 10))
@@ -80,7 +93,7 @@ func dataSourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()

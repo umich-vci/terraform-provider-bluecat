@@ -1,80 +1,98 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strconv"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/umich-vci/gobam"
 )
 
 func dataSourceHostRecord() *schema.Resource {
 	return &schema.Resource{
-		Read: dataSourceHostRecordRead,
+		Description: "",
+
+		ReadContext: dataSourceHostRecordRead,
+
 		Schema: map[string]*schema.Schema{
 			"start": {
-				Type:     schema.TypeInt,
-				Optional: true,
-				Default:  0,
+				Description: "",
+				Type:        schema.TypeInt,
+				Optional:    true,
+				Default:     0,
 			},
 			"result_count": {
-				Type:     schema.TypeInt,
-				Optional: true,
-				Default:  10,
+				Description: "",
+				Type:        schema.TypeInt,
+				Optional:    true,
+				Default:     10,
 			},
 			"absolute_name": {
-				Type:     schema.TypeString,
-				Required: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Required:    true,
 			},
 			"name": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"properties": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"type": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"parent_id": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"parent_type": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"reverse_record": {
-				Type:     schema.TypeBool,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeBool,
+				Computed:    true,
 			},
 			"addresses": {
-				Type:     schema.TypeSet,
-				Computed: true,
-				Elem:     &schema.Schema{Type: schema.TypeString},
+				Description: "",
+				Type:        schema.TypeSet,
+				Computed:    true,
+				Elem:        &schema.Schema{Type: schema.TypeString},
 			},
 			"address_ids": {
-				Type:     schema.TypeSet,
-				Computed: true,
-				Elem:     &schema.Schema{Type: schema.TypeString},
+				Description: "",
+				Type:        schema.TypeSet,
+				Computed:    true,
+				Elem:        &schema.Schema{Type: schema.TypeString},
 			},
 			"custom_properties": {
-				Type:     schema.TypeMap,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeMap,
+				Computed:    true,
 			},
 			"ttl": {
-				Type:     schema.TypeInt,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeInt,
+				Computed:    true,
 			},
 		},
 	}
 }
 
-func dataSourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
+func dataSourceHostRecordRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
 
@@ -86,7 +104,7 @@ func dataSourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	resp, err := client.GetHostRecordsByHint(start, count, options)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get Host Records by hint"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	log.Printf("[INFO] GetHostRecordsByHint returned %s results", strconv.Itoa(len(resp.Item)))
@@ -112,7 +130,7 @@ func dataSourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 		err := fmt.Errorf("no exact host record match found for: %s", absoluteName)
 		if err = gobam.LogoutClientIfError(client, err, "No exact host record match found for hint"); err != nil {
 			mutex.Unlock()
-			return err
+			return diag.FromErr(err)
 		}
 	}
 
@@ -124,7 +142,7 @@ func dataSourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	hostRecordProperties, err := parseHostRecordProperties(*resp.Item[matchLocation].Properties)
 	if err = gobam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	d.Set("absolute_name", hostRecordProperties.absoluteName)
@@ -139,7 +157,7 @@ func dataSourceHostRecordRead(d *schema.ResourceData, meta interface{}) error {
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()

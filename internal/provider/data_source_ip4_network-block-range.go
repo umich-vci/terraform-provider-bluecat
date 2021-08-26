@@ -1,12 +1,14 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math"
 	"strconv"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/umich-vci/gobam"
@@ -14,7 +16,10 @@ import (
 
 func dataSourceIP4Network() *schema.Resource {
 	return &schema.Resource{
-		Read: dataSourceIP4NetworkRead,
+		Description: "",
+
+		ReadContext: dataSourceIP4NetworkRead,
+
 		Schema: map[string]*schema.Schema{
 			"container_id": {
 				Type:     schema.TypeString,
@@ -115,14 +120,14 @@ func dataSourceIP4Network() *schema.Resource {
 	}
 }
 
-func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
+func dataSourceIP4NetworkRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
 
 	containerID, err := strconv.ParseInt(d.Get("container_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert container_id from string to int64"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	otype := d.Get("type").(string)
 	address := d.Get("address").(string)
@@ -130,7 +135,7 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	resp, err := client.GetIPRangedByIP(containerID, otype, address)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	d.SetId(strconv.FormatInt(*resp.Id, 10))
@@ -141,7 +146,7 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)
 	if err = gobam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	d.Set("cidr", networkProperties.CIDR)
@@ -164,7 +169,7 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.CIDR, client)
 	if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	d.Set("addresses_in_use", addressesInUse)
@@ -173,7 +178,7 @@ func dataSourceIP4NetworkRead(d *schema.ResourceData, meta interface{}) error {
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()

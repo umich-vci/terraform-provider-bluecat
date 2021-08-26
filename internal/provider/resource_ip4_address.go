@@ -1,9 +1,11 @@
 package provider
 
 import (
+	"context"
 	"log"
 	"strconv"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/umich-vci/gobam"
@@ -11,34 +13,41 @@ import (
 
 func resourceIP4Address() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceIP4AddressCreate,
-		Read:   resourceIP4AddressRead,
-		Update: resourceIP4AddressUpdate,
-		Delete: resourceIP4AddressDelete,
+		Description: "",
+
+		CreateContext: resourceIP4AddressCreate,
+		ReadContext:   resourceIP4AddressRead,
+		UpdateContext: resourceIP4AddressUpdate,
+		DeleteContext: resourceIP4AddressDelete,
 
 		Schema: map[string]*schema.Schema{
 			"configuration_id": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Required:    true,
+				ForceNew:    true,
 			},
 			"parent_id": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Required:    true,
+				ForceNew:    true,
 			},
 			"mac_address": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Default:  "",
+				Description: "",
+				Type:        schema.TypeString,
+				Optional:    true,
+				Default:     "",
 			},
 			// host records should be created in a separate resource
-			// "host_info": &schema.Schema{
-			// 	Type:     schema.TypeString,
-			// 	Optional: true,
-			// 	Default:  "",
+			// "host_info": {
+			// 	Description: "",
+			// 	Type:        schema.TypeString,
+			// 	Optional:    true,
+			// 	Default:     "",
 			// },
 			"action": {
+				Description:  "",
 				Type:         schema.TypeString,
 				Optional:     true,
 				Default:      "MAKE_STATIC",
@@ -46,41 +55,47 @@ func resourceIP4Address() *schema.Resource {
 				ValidateFunc: validation.StringInSlice(gobam.IPAssignmentActions, false),
 			},
 			"name": {
-				Type:     schema.TypeString,
-				Required: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Required:    true,
 			},
 			"address": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"properties": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"state": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"type": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Description: "",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"custom_properties": {
-				Type:     schema.TypeMap,
-				Optional: true,
+				Description: "",
+				Type:        schema.TypeMap,
+				Optional:    true,
 			},
 		},
 	}
 }
 
-func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceIP4AddressCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
 
 	configID, err := strconv.ParseInt(d.Get("configuration_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert configuration_id from string to int64"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	parentIDString := d.Get("parent_id").(string)
@@ -88,7 +103,7 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 	parentID, err := strconv.ParseInt(parentIDString, 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	macAddress := d.Get("mac_address").(string)
 	hostInfo := "" // host records should be created as a separate resource
@@ -106,7 +121,7 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 	resp, err := client.AssignNextAvailableIP4Address(configID, parentID, macAddress, hostInfo, action, properties)
 	if err = gobam.LogoutClientIfError(client, err, "AssignNextAvailableIP4Address failed"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	d.SetId(strconv.FormatInt(*resp.Id, 10))
@@ -114,28 +129,28 @@ func resourceIP4AddressCreate(d *schema.ResourceData, meta interface{}) error {
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()
 
-	return resourceIP4AddressRead(d, meta)
+	return resourceIP4AddressRead(ctx, d, meta)
 }
 
-func resourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
+func resourceIP4AddressRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	resp, err := client.GetEntityById(id)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Address by Id"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	if *resp.Id == 0 {
@@ -143,7 +158,7 @@ func resourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 
 		if err := client.Logout(); err != nil {
 			mutex.Unlock()
-			return err
+			return diag.FromErr(err)
 		}
 
 		mutex.Unlock()
@@ -163,7 +178,7 @@ func resourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()
@@ -171,14 +186,14 @@ func resourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 	return nil
 }
 
-func resourceIP4AddressUpdate(d *schema.ResourceData, meta interface{}) error {
+func resourceIP4AddressUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	macAddress := d.Get("mac_address").(string)
@@ -206,40 +221,40 @@ func resourceIP4AddressUpdate(d *schema.ResourceData, meta interface{}) error {
 	err = client.Update(&update)
 	if err = gobam.LogoutClientIfError(client, err, "IP4 Address Update failed"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()
 
-	return resourceIP4AddressRead(d, meta)
+	return resourceIP4AddressRead(ctx, d, meta)
 }
 
-func resourceIP4AddressDelete(d *schema.ResourceData, meta interface{}) error {
+func resourceIP4AddressDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	resp, err := client.GetEntityById(id)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Address by Id"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	if *resp.Id == 0 {
 		if err := client.Logout(); err != nil {
 			mutex.Unlock()
-			return err
+			return diag.FromErr(err)
 		}
 
 		mutex.Unlock()
@@ -249,13 +264,13 @@ func resourceIP4AddressDelete(d *schema.ResourceData, meta interface{}) error {
 	err = client.Delete(id)
 	if err = gobam.LogoutClientIfError(client, err, "Delete failed"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()

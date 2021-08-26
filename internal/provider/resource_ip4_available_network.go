@@ -1,20 +1,25 @@
 package provider
 
 import (
+	"context"
 	"hash/crc64"
 	"log"
 	"math/rand"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/umich-vci/gobam"
 )
 
 func resourceIP4AvailableNetwork() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceIP4AvailableNetworkCreate,
-		Read:   schema.Noop,
-		Delete: schema.RemoveFromState,
+		Description: "",
+
+		CreateContext: resourceIP4AvailableNetworkCreate,
+		ReadContext:   schema.NoopContext,
+		DeleteContext: resourceIP4AvailableNetworkDelete,
+
 		Schema: map[string]*schema.Schema{
 			"network_id_list": {
 				Type:     schema.TypeList,
@@ -47,7 +52,7 @@ func resourceIP4AvailableNetwork() *schema.Resource {
 		},
 	}
 }
-func resourceIP4AvailableNetworkCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceIP4AvailableNetworkCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
 
@@ -60,7 +65,7 @@ func resourceIP4AvailableNetworkCreate(d *schema.ResourceData, meta interface{})
 	if len(networkIDList) == 0 {
 		err := gobam.LogoutClientWithError(client, "network_id_list cannot be empty")
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	if random {
@@ -77,19 +82,19 @@ func resourceIP4AvailableNetworkCreate(d *schema.ResourceData, meta interface{})
 				resp, err := client.GetEntityById(id)
 				if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Network by Id"); err != nil {
 					mutex.Unlock()
-					return err
+					return diag.FromErr(err)
 				}
 
 				networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)
 				if err = gobam.LogoutClientIfError(client, err, "Error parsing IP4 network properties"); err != nil {
 					mutex.Unlock()
-					return err
+					return diag.FromErr(err)
 				}
 
 				_, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.CIDR, client)
 				if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
 					mutex.Unlock()
-					return err
+					return diag.FromErr(err)
 				}
 
 				if addressesFree > 0 {
@@ -108,19 +113,19 @@ func resourceIP4AvailableNetworkCreate(d *schema.ResourceData, meta interface{})
 			resp, err := client.GetEntityById(id)
 			if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Network by Id"); err != nil {
 				mutex.Unlock()
-				return err
+				return diag.FromErr(err)
 			}
 
 			networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)
 			if err = gobam.LogoutClientIfError(client, err, "Error parsing IP4 network properties"); err != nil {
 				mutex.Unlock()
-				return err
+				return diag.FromErr(err)
 			}
 
 			_, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.CIDR, client)
 			if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
 				mutex.Unlock()
-				return err
+				return diag.FromErr(err)
 			}
 
 			if addressesFree > 0 {
@@ -141,7 +146,7 @@ func resourceIP4AvailableNetworkCreate(d *schema.ResourceData, meta interface{})
 	if result == -1 {
 		err := gobam.LogoutClientWithError(client, "No networks had a free address")
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	d.SetId("-")
@@ -150,7 +155,7 @@ func resourceIP4AvailableNetworkCreate(d *schema.ResourceData, meta interface{})
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()
@@ -173,4 +178,9 @@ func NewRand(seed string) *rand.Rand {
 
 	randSource := rand.NewSource(seedInt)
 	return rand.New(randSource)
+}
+
+func resourceIP4AvailableNetworkDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+	d.SetId("")
+	return nil
 }
