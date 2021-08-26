@@ -1,10 +1,11 @@
-package bluecat
+package provider
 
 import (
-	"fmt"
+	"context"
 	"log"
 	"strconv"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/umich-vci/gobam"
@@ -12,53 +13,52 @@ import (
 
 func dataSourceEntity() *schema.Resource {
 	return &schema.Resource{
-		Read: dataSourceEntityRead,
+		Description: "Data source to access the attributes of a BlueCat entity.",
+
+		ReadContext: dataSourceEntityRead,
+
 		Schema: map[string]*schema.Schema{
-			"parent_id": &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
-				Default:  0,
+			"name": {
+				Description: "The name of the entity to find.",
+				Type:        schema.TypeString,
+				Required:    true,
 			},
-			"name": &schema.Schema{
-				Type:     schema.TypeString,
-				Required: true,
-			},
-			"type": &schema.Schema{
+			"type": {
+				Description:  "The type of the entity you want to retrieve.",
 				Type:         schema.TypeString,
 				Required:     true,
 				ValidateFunc: validation.StringInSlice(gobam.ObjectTypes, false),
 			},
-			"properties": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
+			"parent_id": {
+				Description: "The object ID of the parent object that contains the entity. Configurations are stored in ID `0`.",
+				Type:        schema.TypeString,
+				Optional:    true,
+				Default:     0,
+			},
+			"properties": {
+				Description: "The properties of the entity as returned by the API (pipe delimited).",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 		},
 	}
 }
 
-func dataSourceEntityRead(d *schema.ResourceData, meta interface{}) error {
+func dataSourceEntityRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
-	config := meta.(*Config)
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
-	err = client.Login(config.Username, config.Password)
-	if err != nil {
-		return fmt.Errorf("Login error: %s", err)
-	}
+	client := meta.(*apiClient).Client
+
 	parentID, err := strconv.ParseInt(d.Get("parent_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	name := d.Get("name").(string)
 	objType := d.Get("type").(string)
 	resp, err := client.GetEntityByName(parentID, name, objType)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get entity by name: %s"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	d.SetId(strconv.FormatInt(*resp.Id, 10))
@@ -67,7 +67,7 @@ func dataSourceEntityRead(d *schema.ResourceData, meta interface{}) error {
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()

@@ -1,73 +1,85 @@
-package bluecat
+package provider
 
 import (
+	"context"
 	"log"
 	"strconv"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/umich-vci/gobam"
 )
 
 func dataSourceIP4Address() *schema.Resource {
 	return &schema.Resource{
-		Read: dataSourceIP4AddressRead,
+		Description: "Data source to access the attributes of an IPv4 address.",
+
+		ReadContext: dataSourceIP4AddressRead,
+
 		Schema: map[string]*schema.Schema{
-			"container_id": &schema.Schema{
-				Type:     schema.TypeString,
-				Required: true,
+			"address": {
+				Description: "The IPv4 address to get data for.",
+				Type:        schema.TypeString,
+				Required:    true,
 			},
-			"address": &schema.Schema{
-				Type:     schema.TypeString,
-				Required: true,
+			"container_id": {
+				Description: "The object ID of the container that has the specified `address`.  This can be a Configuration, IPv4 Block, IPv4 Network, or DHCP range.",
+				Type:        schema.TypeString,
+				Required:    true,
 			},
-			"name": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
+			"custom_properties": {
+				Description: "A map of all custom properties associated with the IPv4 address.",
+				Type:        schema.TypeMap,
+				Computed:    true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
 			},
-			"properties": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
+			"mac_address": {
+				Description: "The MAC address associated with the IPv4 address.",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
-			"type": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
+			"name": {
+				Description: "The name assigned to the IPv4 address.  This is not related to DNS.",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
-			"state": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
+			"properties": {
+				Description: "The properties of the IPv4 address as returned by the API (pipe delimited).",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
-			"mac_address": &schema.Schema{
-				Type:     schema.TypeString,
-				Computed: true,
+			"state": {
+				Description: "The state of the IPv4 address.",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
-			"custom_properties": &schema.Schema{
-				Type:     schema.TypeMap,
-				Computed: true,
+			"type": {
+				Description: "The type of the resource.",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 		},
 	}
 }
 
-func dataSourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
+func dataSourceIP4AddressRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
-	client, err := meta.(*Config).Client()
-	if err != nil {
-		mutex.Unlock()
-		return err
-	}
+	client := meta.(*apiClient).Client
 
 	containerID, err := strconv.ParseInt(d.Get("container_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert container_id from string to int64"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	address := d.Get("address").(string)
 
 	resp, err := client.GetIP4Address(containerID, address)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Address"); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 
 	d.SetId(strconv.FormatInt(*resp.Id, 10))
@@ -84,7 +96,7 @@ func dataSourceIP4AddressRead(d *schema.ResourceData, meta interface{}) error {
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return err
+		return diag.FromErr(err)
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()
