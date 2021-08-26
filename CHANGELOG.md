@@ -1,3 +1,17 @@
+## 0.3.0 (Unreleased)
+
+IMPROVEMENTS:
+
+* Updated [Terraform SDK](https://github.com/hashicorp/terraform-plugin-sdk/) to 2.7.0
+
+* Reworked code to follow [Terraform Provider Scaffolding](https://github.com/hashicorp/terraform-provider-scaffolding)
+
+* Use generated documentation.
+
+* Use context aware functions.
+
+* Now building with go 1.16
+
 ## 0.2.0 (December 9, 2020)
 
 BREAKING CHANGES:
