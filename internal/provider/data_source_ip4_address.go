@@ -32,6 +32,9 @@ func dataSourceIP4Address() *schema.Resource {
 				Description: "A map of all custom properties associated with the IPv4 address.",
 				Type:        schema.TypeMap,
 				Computed:    true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
 			},
 			"mac_address": {
 				Description: "The MAC address associated with the IPv4 address.",

@@ -61,6 +61,9 @@ func dataSourceIP4Network() *schema.Resource {
 				Description: "A map of all custom properties associated with the IPv4 network.",
 				Type:        schema.TypeMap,
 				Computed:    true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
 			},
 			"default_domains": {
 				Description: "TODO",
@@ -162,9 +165,9 @@ func dataSourceIP4NetworkRead(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	d.SetId(strconv.FormatInt(*resp.Id, 10))
-	d.Set("name", *resp.Name)
-	d.Set("properties", *resp.Properties)
-	d.Set("type", *resp.Type)
+	d.Set("name", resp.Name)
+	d.Set("properties", resp.Properties)
+	d.Set("type", resp.Type)
 
 	networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)
 	if err = gobam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {

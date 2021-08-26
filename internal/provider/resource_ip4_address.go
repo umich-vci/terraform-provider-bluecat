@@ -50,6 +50,9 @@ func resourceIP4Address() *schema.Resource {
 				Description: "A map of all custom properties associated with the IPv4 address.",
 				Type:        schema.TypeMap,
 				Optional:    true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
 			},
 			"mac_address": {
 				Description: "The MAC address to associate with the IPv4 address.",

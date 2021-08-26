@@ -52,6 +52,9 @@ func dataSourceHostRecord() *schema.Resource {
 				Description: "A map of all custom properties associated with the host record.",
 				Type:        schema.TypeMap,
 				Computed:    true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
 			},
 			"name": {
 				Description: "The short name of the host record.",
@@ -135,8 +138,8 @@ func dataSourceHostRecordRead(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	d.SetId(strconv.FormatInt(*resp.Item[matchLocation].Id, 10))
-	d.Set("name", *resp.Item[matchLocation].Name)
-	d.Set("properties", *resp.Item[matchLocation].Properties)
+	d.Set("name", resp.Item[matchLocation].Name)
+	d.Set("properties", resp.Item[matchLocation].Properties)
 	d.Set("type", resp.Item[matchLocation].Type)
 
 	hostRecordProperties, err := parseHostRecordProperties(*resp.Item[matchLocation].Properties)

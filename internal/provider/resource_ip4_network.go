@@ -209,8 +209,8 @@ func resourceIP4NetworkRead(ctx context.Context, d *schema.ResourceData, meta in
 		return nil
 	}
 
-	d.Set("name", *resp.Name)
-	d.Set("properties", *resp.Properties)
+	d.Set("name", resp.Name)
+	d.Set("properties", resp.Properties)
 	d.Set("type", resp.Type)
 
 	networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)

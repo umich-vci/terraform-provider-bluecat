@@ -35,6 +35,9 @@ func resourceIP4AvailableNetwork() *schema.Resource {
 				Type:        schema.TypeMap,
 				Optional:    true,
 				ForceNew:    true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
 			},
 			"random": {
 				Description: "By default, the network with the most free IP addresses is returned. By setting this to `true` a random network from the list will be returned instead. The network will be validated to have at least 1 free IP address.",
