@@ -54,6 +54,7 @@ func resourceHostRecord() *schema.Resource {
 				Description: "A map of all custom properties associated with the host record.",
 				Type:        schema.TypeMap,
 				Optional:    true,
+				Computed:    true,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
