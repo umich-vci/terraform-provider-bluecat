@@ -2,7 +2,7 @@
 
 FEATURES:
 
-* **New Datasoruce:** `bluecat_ip4_network`
+* **New Datasource:** `bluecat_ip4_network`
 
 BUG FIXES:
 
