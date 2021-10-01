@@ -47,6 +47,7 @@ func dataSourceEntity() *schema.Resource {
 func dataSourceEntityRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
+	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
 
 	parentID, err := strconv.ParseInt(d.Get("parent_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
@@ -59,6 +60,17 @@ func dataSourceEntityRead(ctx context.Context, d *schema.ResourceData, meta inte
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get entity by name: %s"); err != nil {
 		mutex.Unlock()
 		return diag.FromErr(err)
+	}
+
+	if *resp.Id == 0 {
+		var diags diag.Diagnostics
+		err := gobam.LogoutClientWithError(client, "Entity not found")
+		mutex.Unlock()
+
+		diags = append(diags, diag.FromErr(err)...)
+		diags = append(diags, diag.Errorf("Entity ID returned was 0")...)
+
+		return diags
 	}
 
 	d.SetId(strconv.FormatInt(*resp.Id, 10))

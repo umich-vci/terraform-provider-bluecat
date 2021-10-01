@@ -14,7 +14,7 @@ Resource create a host record.
 
 ```terraform
 resource "bluecat_host_record" "hostname" {
-  view      = data.bluecat_entity.view.id
+  view_id   = data.bluecat_entity.view.id
   name      = "hostname"
   dns_zone  = "example.com"
   addresses = ["192.168.1.100"]

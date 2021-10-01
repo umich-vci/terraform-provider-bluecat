@@ -54,6 +54,7 @@ func resourceHostRecord() *schema.Resource {
 				Description: "A map of all custom properties associated with the host record.",
 				Type:        schema.TypeMap,
 				Optional:    true,
+				Computed:    true,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
@@ -92,6 +93,7 @@ func resourceHostRecord() *schema.Resource {
 func resourceHostRecordCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
+	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
 
 	viewID, err := strconv.ParseInt(d.Get("view_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert view_id from string to int64"); err != nil {
@@ -137,6 +139,7 @@ func resourceHostRecordCreate(ctx context.Context, d *schema.ResourceData, meta 
 func resourceHostRecordRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
+	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
@@ -192,6 +195,7 @@ func resourceHostRecordRead(ctx context.Context, d *schema.ResourceData, meta in
 func resourceHostRecordUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
+	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
@@ -243,6 +247,7 @@ func resourceHostRecordUpdate(ctx context.Context, d *schema.ResourceData, meta 
 func resourceHostRecordDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
+	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {

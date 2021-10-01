@@ -63,6 +63,7 @@ func resourceIP4AvailableNetwork() *schema.Resource {
 func resourceIP4AvailableNetworkCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
+	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
 
 	result := -1
 

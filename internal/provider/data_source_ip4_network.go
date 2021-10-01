@@ -2,40 +2,35 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"math"
 	"strconv"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/umich-vci/gobam"
 )
 
-func dataSourceIP4NBR() *schema.Resource {
+func dataSourceIP4Network() *schema.Resource {
 	return &schema.Resource{
-		Description: "Data source to access the attributes of an IPv4 network, IPv4 Block, or DHCPv4 Range from an IPv4 address.",
+		Description: "Data source to access the attributes of an IPv4 network from a hint based search.",
 
-		ReadContext: dataSourceIP4NBRRead,
+		ReadContext: dataSourceIP4NetworkRead,
 
 		Schema: map[string]*schema.Schema{
-			"address": {
-				Description: "IP address to find the IPv4 network, IPv4 Block, or DHCPv4 Range of.",
+			"hint": {
+				Description: "Hint to find the IP4Network",
 				Type:        schema.TypeString,
 				Required:    true,
 			},
 			"container_id": {
-				Description: "The object ID of a container that contains the specified IPv4 network, block, or range.",
+				Description: "The object ID of a container that contains the specified IPv4 network.",
 				Type:        schema.TypeString,
 				Required:    true,
 			},
 			"type": {
-				Description:  "Must be \"IP4Block\", \"IP4Network\", \"DHCP4Range\", or \"\". \"\" will find the most specific container.",
-				Type:         schema.TypeString,
-				Required:     true,
-				ValidateFunc: validation.StringInSlice([]string{"IP4Block", "IP4Network", "DHCP4Range", ""}, false),
+				Description: "The type of the IP4Network",
+				Type:        schema.TypeString,
+				Computed:    true,
 			},
 			"addresses_free": {
 				Description: "The number of addresses unallocated/free on the network.",
@@ -146,7 +141,7 @@ func dataSourceIP4NBR() *schema.Resource {
 	}
 }
 
-func dataSourceIP4NBRRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+func dataSourceIP4NetworkRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
 	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
@@ -156,22 +151,33 @@ func dataSourceIP4NBRRead(ctx context.Context, d *schema.ResourceData, meta inte
 		mutex.Unlock()
 		return diag.FromErr(err)
 	}
-	otype := d.Get("type").(string)
-	address := d.Get("address").(string)
+	hint := d.Get("hint").(string)
+	options := "hint=" + hint
 
-	resp, err := client.GetIPRangedByIP(containerID, otype, address)
+	resp, err := client.GetIP4NetworksByHint(containerID, 0, 1, options)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint"); err != nil {
 		mutex.Unlock()
 		return diag.FromErr(err)
 	}
 
-	d.SetId(strconv.FormatInt(*resp.Id, 10))
-	d.Set("name", resp.Name)
-	d.Set("properties", resp.Properties)
-	d.Set("type", resp.Type)
+	if len(resp.Item) > 1 || len(resp.Item) == 0 {
+		var diags diag.Diagnostics
+		err := gobam.LogoutClientWithError(client, "Network lookup error")
+		mutex.Unlock()
 
-	networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)
-	if err = gobam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
+		diags = append(diags, diag.FromErr(err)...)
+		diags = append(diags, diag.Errorf("Hint %s returned %d networks but should have returned 1", hint, len(resp.Item))...)
+
+		return diags
+	}
+
+	d.SetId(strconv.FormatInt(*resp.Item[0].Id, 10))
+	d.Set("name", resp.Item[0].Name)
+	d.Set("properties", resp.Item[0].Properties)
+	d.Set("type", resp.Item[0].Type)
+
+	networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Item[0].Properties)
+	if err = gobam.LogoutClientIfError(client, err, "Error parsing network properties"); err != nil {
 		mutex.Unlock()
 		return diag.FromErr(err)
 	}
@@ -193,7 +199,7 @@ func dataSourceIP4NBRRead(ctx context.Context, d *schema.ResourceData, meta inte
 	d.Set("location_inherited", networkProperties.LocationInherited)
 	d.Set("custom_properties", networkProperties.CustomProperties)
 
-	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.CIDR, client)
+	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Item[0].Id, networkProperties.CIDR, client)
 	if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
 		mutex.Unlock()
 		return diag.FromErr(err)
@@ -211,24 +217,4 @@ func dataSourceIP4NBRRead(ctx context.Context, d *schema.ResourceData, meta inte
 	mutex.Unlock()
 
 	return nil
-}
-
-func getIP4NetworkAddressUsage(id int64, cidr string, client gobam.ProteusAPI) (int, int, error) {
-
-	netmask, err := strconv.ParseFloat(strings.Split(cidr, "/")[1], 64)
-	if err != nil {
-		mutex.Unlock()
-		return 0, 0, fmt.Errorf("error parsing netmask from cidr string")
-	}
-	addressCount := int(math.Pow(2, (32 - netmask)))
-
-	resp, err := client.GetEntities(id, "IP4Address", 0, addressCount)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	addressesInUse := len(resp.Item)
-	addressesFree := addressCount - addressesInUse
-
-	return addressesInUse, addressesFree, nil
 }

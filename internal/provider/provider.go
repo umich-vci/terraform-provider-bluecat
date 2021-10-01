@@ -63,7 +63,8 @@ func New(version string) func() *schema.Provider {
 				"bluecat_entity":                  dataSourceEntity(),
 				"bluecat_host_record":             dataSourceHostRecord(),
 				"bluecat_ip4_address":             dataSourceIP4Address(),
-				"bluecat_ip4_network-block-range": dataSourceIP4Network(),
+				"bluecat_ip4_network":             dataSourceIP4Network(),
+				"bluecat_ip4_network-block-range": dataSourceIP4NBR(),
 			},
 			ResourcesMap: map[string]*schema.Resource{
 				"bluecat_host_record":           resourceHostRecord(),
@@ -80,25 +81,22 @@ func New(version string) func() *schema.Provider {
 }
 
 type apiClient struct {
-	Client gobam.ProteusAPI
+	Client   gobam.ProteusAPI
+	Username string
+	Password string
 }
 
 func configure(version string, p *schema.Provider) func(context.Context, *schema.ResourceData) (interface{}, diag.Diagnostics) {
 	return func(ctx context.Context, d *schema.ResourceData) (interface{}, diag.Diagnostics) {
-		// Warning or errors can be collected in a slice type
-		var diags diag.Diagnostics
 
 		username := d.Get("username").(string)
 		password := d.Get("password").(string)
 		endpoint := d.Get("bluecat_endpoint").(string)
 		sslVerify := d.Get("ssl_verify").(bool)
 
-		client, err := gobam.Client(username, password, endpoint, sslVerify)
-		if err != nil {
-			return nil, diag.FromErr(err)
-		}
+		client := gobam.NewClient(endpoint, sslVerify)
 
-		return &apiClient{Client: client}, diags
+		return &apiClient{Client: client, Username: username, Password: password}, nil
 	}
 }
 
