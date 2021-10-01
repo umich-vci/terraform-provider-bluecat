@@ -154,7 +154,7 @@ func dataSourceIP4NetworkRead(ctx context.Context, d *schema.ResourceData, meta 
 	hint := d.Get("hint").(string)
 	options := "hint=" + hint
 
-	resp, err := client.GetIP4NetworksByHint(containerID, 0, 0, options)
+	resp, err := client.GetIP4NetworksByHint(containerID, 0, 1, options)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint"); err != nil {
 		mutex.Unlock()
 		return diag.FromErr(err)
@@ -166,7 +166,7 @@ func dataSourceIP4NetworkRead(ctx context.Context, d *schema.ResourceData, meta 
 		mutex.Unlock()
 
 		diags = append(diags, diag.FromErr(err)...)
-		diags = append(diags, diag.Errorf("Hint %s returned %d networks", hint, len(resp.Item))...)
+		diags = append(diags, diag.Errorf("Hint %s returned %d networks but should have returned 1", hint, len(resp.Item))...)
 
 		return diags
 	}
