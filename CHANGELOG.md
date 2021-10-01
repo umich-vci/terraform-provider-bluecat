@@ -1,4 +1,4 @@
-## 0.3.0 (Unreleased)
+## 0.3.0 (October 10, 2021)
 
 FEATURES:
 
@@ -10,7 +10,9 @@ BUG FIXES:
 
 IMPROVEMENTS:
 
-* Updated [Terraform SDK](https://github.com/hashicorp/terraform-plugin-sdk/) to 2.7.0
+* Updated [Terraform SDK](https://github.com/hashicorp/terraform-plugin-sdk/) to 2.8.0
+
+* Updated [terraform-plugin-docs](https://github.com/hashicorp/terraform-plugin-docs) to 0.5.0
 
 * Reworked code to follow [Terraform Provider Scaffolding](https://github.com/hashicorp/terraform-provider-scaffolding)
 
