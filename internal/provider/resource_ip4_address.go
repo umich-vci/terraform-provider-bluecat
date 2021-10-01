@@ -87,6 +87,7 @@ func resourceIP4Address() *schema.Resource {
 func resourceIP4AddressCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
+	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
 
 	configID, err := strconv.ParseInt(d.Get("configuration_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert configuration_id from string to int64"); err != nil {
@@ -136,6 +137,7 @@ func resourceIP4AddressCreate(ctx context.Context, d *schema.ResourceData, meta 
 func resourceIP4AddressRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
+	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
@@ -185,6 +187,7 @@ func resourceIP4AddressRead(ctx context.Context, d *schema.ResourceData, meta in
 func resourceIP4AddressUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
+	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
@@ -234,6 +237,7 @@ func resourceIP4AddressUpdate(ctx context.Context, d *schema.ResourceData, meta 
 func resourceIP4AddressDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
+	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
 
 	id, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {

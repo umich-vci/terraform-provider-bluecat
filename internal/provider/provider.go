@@ -81,25 +81,22 @@ func New(version string) func() *schema.Provider {
 }
 
 type apiClient struct {
-	Client gobam.ProteusAPI
+	Client   gobam.ProteusAPI
+	Username string
+	Password string
 }
 
 func configure(version string, p *schema.Provider) func(context.Context, *schema.ResourceData) (interface{}, diag.Diagnostics) {
 	return func(ctx context.Context, d *schema.ResourceData) (interface{}, diag.Diagnostics) {
-		// Warning or errors can be collected in a slice type
-		var diags diag.Diagnostics
 
 		username := d.Get("username").(string)
 		password := d.Get("password").(string)
 		endpoint := d.Get("bluecat_endpoint").(string)
 		sslVerify := d.Get("ssl_verify").(bool)
 
-		client, err := gobam.Client(username, password, endpoint, sslVerify)
-		if err != nil {
-			return nil, diag.FromErr(err)
-		}
+		client := gobam.NewClient(endpoint, sslVerify)
 
-		return &apiClient{Client: client}, diags
+		return &apiClient{Client: client, Username: username, Password: password}, nil
 	}
 }
 

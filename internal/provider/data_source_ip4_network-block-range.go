@@ -149,6 +149,7 @@ func dataSourceIP4NBR() *schema.Resource {
 func dataSourceIP4NBRRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
+	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
 
 	containerID, err := strconv.ParseInt(d.Get("container_id").(string), 10, 64)
 	if err = gobam.LogoutClientIfError(client, err, "Unable to convert container_id from string to int64"); err != nil {

@@ -98,6 +98,7 @@ func dataSourceHostRecord() *schema.Resource {
 func dataSourceHostRecordRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
+	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
 
 	start := d.Get("start").(int)
 	count := d.Get("result_count").(int)
