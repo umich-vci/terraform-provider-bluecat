@@ -1,5 +1,9 @@
 ## 0.3.0 (Unreleased)
 
+BUG FIXES:
+
+* Error if no entity is found with the bluecat_entity datasource.
+
 IMPROVEMENTS:
 
 * Updated [Terraform SDK](https://github.com/hashicorp/terraform-plugin-sdk/) to 2.7.0

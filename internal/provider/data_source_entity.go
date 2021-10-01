@@ -61,6 +61,17 @@ func dataSourceEntityRead(ctx context.Context, d *schema.ResourceData, meta inte
 		return diag.FromErr(err)
 	}
 
+	if *resp.Id == 0 {
+		var diags diag.Diagnostics
+		err := gobam.LogoutClientWithError(client, "Entity not found")
+		mutex.Unlock()
+
+		diags = append(diags, diag.FromErr(err)...)
+		diags = append(diags, diag.Errorf("Entity ID returned was 0")...)
+
+		return diags
+	}
+
 	d.SetId(strconv.FormatInt(*resp.Id, 10))
 	d.Set("properties", resp.Properties)
 
