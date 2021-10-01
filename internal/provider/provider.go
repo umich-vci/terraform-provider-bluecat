@@ -63,7 +63,7 @@ func New(version string) func() *schema.Provider {
 				"bluecat_entity":                  dataSourceEntity(),
 				"bluecat_host_record":             dataSourceHostRecord(),
 				"bluecat_ip4_address":             dataSourceIP4Address(),
-				"bluecat_ip4_network-block-range": dataSourceIP4Network(),
+				"bluecat_ip4_network-block-range": dataSourceIP4NBR(),
 			},
 			ResourcesMap: map[string]*schema.Resource{
 				"bluecat_host_record":           resourceHostRecord(),

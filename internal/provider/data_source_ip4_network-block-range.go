@@ -14,11 +14,11 @@ import (
 	"github.com/umich-vci/gobam"
 )
 
-func dataSourceIP4Network() *schema.Resource {
+func dataSourceIP4NBR() *schema.Resource {
 	return &schema.Resource{
 		Description: "Data source to access the attributes of an IPv4 network, IPv4 Block, or DHCPv4 Range.",
 
-		ReadContext: dataSourceIP4NetworkRead,
+		ReadContext: dataSourceIP4NBRRead,
 
 		Schema: map[string]*schema.Schema{
 			"address": {
@@ -146,7 +146,7 @@ func dataSourceIP4Network() *schema.Resource {
 	}
 }
 
-func dataSourceIP4NetworkRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+func dataSourceIP4NBRRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	mutex.Lock()
 	client := meta.(*apiClient).Client
 
