@@ -1,5 +1,9 @@
 ## 0.3.0 (Unreleased)
 
+FEATURES:
+
+* **New Datasoruce:** `bluecat_ip4_network`
+
 BUG FIXES:
 
 * Error if no entity is found with the bluecat_entity datasource.

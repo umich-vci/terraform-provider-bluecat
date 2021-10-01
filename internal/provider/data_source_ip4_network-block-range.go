@@ -16,7 +16,7 @@ import (
 
 func dataSourceIP4NBR() *schema.Resource {
 	return &schema.Resource{
-		Description: "Data source to access the attributes of an IPv4 network, IPv4 Block, or DHCPv4 Range.",
+		Description: "Data source to access the attributes of an IPv4 network, IPv4 Block, or DHCPv4 Range from an IPv4 address.",
 
 		ReadContext: dataSourceIP4NBRRead,
 
