@@ -1,3 +1,9 @@
+## 0.3.1 (October 15, 2021)
+
+BUG FIXES:
+
+* bluecat_ip4_network was not returning all properties.
+
 ## 0.3.0 (October 10, 2021)
 
 FEATURES:
