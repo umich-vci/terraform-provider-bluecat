@@ -154,29 +154,37 @@ func dataSourceIP4NetworkRead(ctx context.Context, d *schema.ResourceData, meta 
 	hint := d.Get("hint").(string)
 	options := "hint=" + hint
 
-	resp, err := client.GetIP4NetworksByHint(containerID, 0, 1, options)
+	hintResp, err := client.GetIP4NetworksByHint(containerID, 0, 1, options)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint"); err != nil {
 		mutex.Unlock()
 		return diag.FromErr(err)
 	}
 
-	if len(resp.Item) > 1 || len(resp.Item) == 0 {
+	if len(hintResp.Item) > 1 || len(hintResp.Item) == 0 {
 		var diags diag.Diagnostics
 		err := gobam.LogoutClientWithError(client, "Network lookup error")
 		mutex.Unlock()
 
 		diags = append(diags, diag.FromErr(err)...)
-		diags = append(diags, diag.Errorf("Hint %s returned %d networks but should have returned 1", hint, len(resp.Item))...)
+		diags = append(diags, diag.Errorf("Hint %s returned %d networks but should have returned 1", hint, len(hintResp.Item))...)
 
 		return diags
 	}
 
-	d.SetId(strconv.FormatInt(*resp.Item[0].Id, 10))
-	d.Set("name", resp.Item[0].Name)
-	d.Set("properties", resp.Item[0].Properties)
-	d.Set("type", resp.Item[0].Type)
+	d.SetId(strconv.FormatInt(*hintResp.Item[0].Id, 10))
 
-	networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Item[0].Properties)
+	// GetIP4NetworksByHint doesn't seem to return all properties so use the ID returned by it to call GetEntityById
+	resp, err := client.GetEntityById(*hintResp.Item[0].Id)
+	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint"); err != nil {
+		mutex.Unlock()
+		return diag.FromErr(err)
+	}
+
+	d.Set("name", resp.Name)
+	d.Set("properties", resp.Properties)
+	d.Set("type", resp.Type)
+
+	networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)
 	if err = gobam.LogoutClientIfError(client, err, "Error parsing network properties"); err != nil {
 		mutex.Unlock()
 		return diag.FromErr(err)
@@ -199,7 +207,7 @@ func dataSourceIP4NetworkRead(ctx context.Context, d *schema.ResourceData, meta 
 	d.Set("location_inherited", networkProperties.LocationInherited)
 	d.Set("custom_properties", networkProperties.CustomProperties)
 
-	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Item[0].Id, networkProperties.CIDR, client)
+	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.CIDR, client)
 	if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
 		mutex.Unlock()
 		return diag.FromErr(err)
