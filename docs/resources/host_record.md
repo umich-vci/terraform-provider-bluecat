@@ -30,23 +30,23 @@ output "bluecat_hostname_fqdn" {
 
 ### Required
 
-- **addresses** (Set of String) The address(es) to be associated with the host record.
-- **dns_zone** (String) The DNS zone to create the host record in. Combined with `name` to make the fqdn.  If changed, forces a new resource.
-- **name** (String) The name of the host record to be created. Combined with `dns_zone` to make the fqdn.
-- **view_id** (String) The object ID of the View that host record should be created in. If changed, forces a new resource.
+- `addresses` (Set of String) The address(es) to be associated with the host record.
+- `dns_zone` (String) The DNS zone to create the host record in. Combined with `name` to make the fqdn.  If changed, forces a new resource.
+- `name` (String) The name of the host record to be created. Combined with `dns_zone` to make the fqdn.
+- `view_id` (String) The object ID of the View that host record should be created in. If changed, forces a new resource.
 
 ### Optional
 
-- **comments** (String) Comments to be associated with the host record. Defaults to ``.
-- **custom_properties** (Map of String) A map of all custom properties associated with the host record.
-- **id** (String) The ID of this resource.
-- **reverse_record** (Boolean) If a reverse record should be created for addresses. Defaults to `true`.
-- **ttl** (Number) The TTL for the host record.  When set to -1, ignores the TTL. Defaults to `-1`.
+- `comments` (String) Comments to be associated with the host record. Defaults to ``.
+- `custom_properties` (Map of String) A map of all custom properties associated with the host record.
+- `reverse_record` (Boolean) If a reverse record should be created for addresses. Defaults to `true`.
+- `ttl` (Number) The TTL for the host record.  When set to -1, ignores the TTL. Defaults to `-1`.
 
 ### Read-Only
 
-- **absolute_name** (String) The absolute name (fqdn) of the host record.
-- **properties** (String) The properties of the host record as returned by the API (pipe delimited).
-- **type** (String) The type of the resource.
+- `absolute_name` (String) The absolute name (fqdn) of the host record.
+- `id` (String) The ID of this resource.
+- `properties` (String) The properties of the host record as returned by the API (pipe delimited).
+- `type` (String) The type of the resource.
 
 

@@ -28,16 +28,16 @@ output "bluecat_config_id" {
 
 ### Required
 
-- **name** (String) The name of the entity to find.
-- **type** (String) The type of the entity you want to retrieve.
+- `name` (String) The name of the entity to find.
+- `type` (String) The type of the entity you want to retrieve.
 
 ### Optional
 
-- **id** (String) The ID of this resource.
-- **parent_id** (String) The object ID of the parent object that contains the entity. Configurations are stored in ID `0`. Defaults to `0`.
+- `parent_id` (String) The object ID of the parent object that contains the entity. Configurations are stored in ID `0`. Defaults to `0`.
 
 ### Read-Only
 
-- **properties** (String) The properties of the entity as returned by the API (pipe delimited).
+- `id` (String) The ID of this resource.
+- `properties` (String) The properties of the entity as returned by the API (pipe delimited).
 
 

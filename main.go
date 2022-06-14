@@ -1,9 +1,7 @@
 package main
 
 import (
-	"context"
 	"flag"
-	"log"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
 	"github.com/umich-vci/terraform-provider-bluecat/internal/provider"
@@ -34,14 +32,12 @@ func main() {
 	flag.BoolVar(&debugMode, "debug", false, "set to true to run the provider with support for debuggers like delve")
 	flag.Parse()
 
-	opts := &plugin.ServeOpts{ProviderFunc: provider.New(version)}
+	opts := &plugin.ServeOpts{
+		Debug: debugMode,
 
-	if debugMode {
-		err := plugin.Debug(context.Background(), "registry.terraform.io/umich-vci/bluecat", opts)
-		if err != nil {
-			log.Fatal(err.Error())
-		}
-		return
+		ProviderAddr: "registry.terraform.io/umich-vci/bluecat",
+
+		ProviderFunc: provider.New(version),
 	}
 
 	plugin.Serve(opts)
