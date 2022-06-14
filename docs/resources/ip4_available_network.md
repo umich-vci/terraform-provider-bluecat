@@ -27,17 +27,17 @@ output "network_id" {
 
 ### Required
 
-- **network_id_list** (List of Number) A list of Network IDs to search for a free IP address. By default, the address with the most free addresses will be returned. See the `random` argument for another selection method. The resource will be recreated if the network_id_list is changed. You may want to use a `lifecycle` customization to ignore changes to the list after resource creation so that a new network is not selected if the list is changed.
+- `network_id_list` (List of Number) A list of Network IDs to search for a free IP address. By default, the address with the most free addresses will be returned. See the `random` argument for another selection method. The resource will be recreated if the network_id_list is changed. You may want to use a `lifecycle` customization to ignore changes to the list after resource creation so that a new network is not selected if the list is changed.
 
 ### Optional
 
-- **id** (String) The ID of this resource.
-- **keepers** (Map of String) An arbitrary map of values. If this argument is changed, then the resource will be recreated.
-- **random** (Boolean) By default, the network with the most free IP addresses is returned. By setting this to `true` a random network from the list will be returned instead. The network will be validated to have at least 1 free IP address. Defaults to `false`.
-- **seed** (String) A seed for the `random` argument's generator. Can be used to try to get more predictable results from the random selection. The results will not be fixed however.
+- `keepers` (Map of String) An arbitrary map of values. If this argument is changed, then the resource will be recreated.
+- `random` (Boolean) By default, the network with the most free IP addresses is returned. By setting this to `true` a random network from the list will be returned instead. The network will be validated to have at least 1 free IP address. Defaults to `false`.
+- `seed` (String) A seed for the `random` argument's generator. Can be used to try to get more predictable results from the random selection. The results will not be fixed however.
 
 ### Read-Only
 
-- **network_id** (Number) The network ID of the network selected by the resource.
+- `id` (String) The ID of this resource.
+- `network_id` (Number) The network ID of the network selected by the resource.
 
 

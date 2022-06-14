@@ -29,35 +29,32 @@ output "bluecat_network_name" {
 
 ### Required
 
-- **address** (String) IP address to find the IPv4 network, IPv4 Block, or DHCPv4 Range of.
-- **container_id** (String) The object ID of a container that contains the specified IPv4 network, block, or range.
-- **type** (String) Must be "IP4Block", "IP4Network", "DHCP4Range", or "". "" will find the most specific container.
-
-### Optional
-
-- **id** (String) The ID of this resource.
+- `address` (String) IP address to find the IPv4 network, IPv4 Block, or DHCPv4 Range of.
+- `container_id` (String) The object ID of a container that contains the specified IPv4 network, block, or range.
+- `type` (String) Must be "IP4Block", "IP4Network", "DHCP4Range", or "". "" will find the most specific container.
 
 ### Read-Only
 
-- **addresses_free** (Number) The number of addresses unallocated/free on the network.
-- **addresses_in_use** (Number) The number of addresses allocated/in use on the network.
-- **allow_duplicate_host** (String) Duplicate host names check.
-- **cidr** (String) The CIDR address of the IPv4 network.
-- **custom_properties** (Map of String) A map of all custom properties associated with the IPv4 network.
-- **default_domains** (Set of String) TODO
-- **default_view** (String) The object id of the default DNS View for the network.
-- **dns_restrictions** (Set of String) TODO
-- **gateway** (String) The gateway of the IPv4 network.
-- **inherit_allow_duplicate_host** (Boolean) Duplicate host names check is inherited.
-- **inherit_default_domains** (Boolean) Default domains are inherited.
-- **inherit_default_view** (Boolean) The default DNS View is inherited.
-- **inherit_dns_restrictions** (Boolean) DNS restrictions are inherited.
-- **inherit_ping_before_assign** (Boolean) The network pings an address before assignment is inherited.
-- **location_code** (String) TODO
-- **location_inherited** (Boolean) TODO
-- **name** (String) The name assigned the resource.
-- **ping_before_assign** (String) The network pings an address before assignment.
-- **properties** (String) The properties of the resource as returned by the API (pipe delimited).
-- **template** (String) TODO
+- `addresses_free` (Number) The number of addresses unallocated/free on the network.
+- `addresses_in_use` (Number) The number of addresses allocated/in use on the network.
+- `allow_duplicate_host` (String) Duplicate host names check.
+- `cidr` (String) The CIDR address of the IPv4 network.
+- `custom_properties` (Map of String) A map of all custom properties associated with the IPv4 network.
+- `default_domains` (Set of String) TODO
+- `default_view` (String) The object id of the default DNS View for the network.
+- `dns_restrictions` (Set of String) TODO
+- `gateway` (String) The gateway of the IPv4 network.
+- `id` (String) The ID of this resource.
+- `inherit_allow_duplicate_host` (Boolean) Duplicate host names check is inherited.
+- `inherit_default_domains` (Boolean) Default domains are inherited.
+- `inherit_default_view` (Boolean) The default DNS View is inherited.
+- `inherit_dns_restrictions` (Boolean) DNS restrictions are inherited.
+- `inherit_ping_before_assign` (Boolean) The network pings an address before assignment is inherited.
+- `location_code` (String) TODO
+- `location_inherited` (Boolean) TODO
+- `name` (String) The name assigned the resource.
+- `ping_before_assign` (String) The network pings an address before assignment.
+- `properties` (String) The properties of the resource as returned by the API (pipe delimited).
+- `template` (String) TODO
 
 
