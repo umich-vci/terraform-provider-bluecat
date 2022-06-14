@@ -60,6 +60,7 @@ func New(version string) func() *schema.Provider {
 			},
 
 			DataSourcesMap: map[string]*schema.Resource{
+				"bluecat_alias_record":            dataSourceAliasRecord(),
 				"bluecat_entity":                  dataSourceEntity(),
 				"bluecat_host_record":             dataSourceHostRecord(),
 				"bluecat_ip4_address":             dataSourceIP4Address(),
@@ -67,9 +68,11 @@ func New(version string) func() *schema.Provider {
 				"bluecat_ip4_network-block-range": dataSourceIP4NBR(),
 			},
 			ResourcesMap: map[string]*schema.Resource{
+				"bluecat_alias_record":          resourceAliasRecord(),
 				"bluecat_host_record":           resourceHostRecord(),
 				"bluecat_ip4_address":           resourceIP4Address(),
 				"bluecat_ip4_available_network": resourceIP4AvailableNetwork(),
+				"bluecat_ip4_change_state":      resourceIP4ChangeState(),
 				"bluecat_ip4_network":           resourceIP4Network(),
 			},
 		}
