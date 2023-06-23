@@ -122,14 +122,6 @@ func (d *IP4AddressDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	// If applicable, this is a great opportunity to initialize any necessary
-	// provider client data and make a call using it.
-	// httpResp, err := d.client.Do(httpReq)
-	// if err != nil {
-	//     resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read example, got error: %s", err))
-	//     return
-	// }
-
 	mutex.Lock()
 	client := d.client.Client
 	client.Login(d.client.Username, d.client.Password)
@@ -154,7 +146,7 @@ func (d *IP4AddressDataSource) Read(ctx context.Context, req datasource.ReadRequ
 
 	addressProperties, err := parseIP4AddressProperties(*ip4Address.Properties)
 	if err != nil {
-		gobam.LogoutClientWithError(d.client.Client, "Error parsing host record properties")
+		gobam.LogoutClientWithError(client, "Error parsing host record properties")
 		mutex.Unlock()
 
 		resp.Diagnostics.AddError(
@@ -168,7 +160,7 @@ func (d *IP4AddressDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.CustomProperties = addressProperties.customProperties
 
 	// logout client
-	if err := d.client.Client.Logout(); err != nil {
+	if err := client.Logout(); err != nil {
 		mutex.Unlock()
 		resp.Diagnostics.AddError(
 			"Failed logout client",

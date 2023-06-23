@@ -106,15 +106,16 @@ func (d *entityDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	}
 
 	mutex.Lock()
-	d.client.Client.Login(d.client.Username, d.client.Password)
+	client := d.client.Client
+	client.Login(d.client.Username, d.client.Password)
 
 	parentID := data.ParentID.ValueInt64()
 
 	name := data.Name.ValueString()
 	objType := data.Type.ValueString()
 
-	entity, err := d.client.Client.GetEntityByName(parentID, name, objType)
-	if err = gobam.LogoutClientIfError(d.client.Client, err, "Failed to get entity by name: %s"); err != nil {
+	entity, err := client.GetEntityByName(parentID, name, objType)
+	if err = gobam.LogoutClientIfError(client, err, "Failed to get entity by name: %s"); err != nil {
 		mutex.Unlock()
 		resp.Diagnostics.AddError(
 			"Failed to get entity by name",
@@ -124,7 +125,7 @@ func (d *entityDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	}
 
 	if *entity.Id == 0 {
-		gobam.LogoutClientWithError(d.client.Client, "Entity not found")
+		gobam.LogoutClientWithError(client, "Entity not found")
 		mutex.Unlock()
 
 		resp.Diagnostics.AddError(
@@ -139,7 +140,7 @@ func (d *entityDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	data.Properties = types.StringValue(*entity.Properties)
 
 	// logout client
-	if err := d.client.Client.Logout(); err != nil {
+	if err := client.Logout(); err != nil {
 		mutex.Unlock()
 		resp.Diagnostics.AddError(
 			"Failed logout client",

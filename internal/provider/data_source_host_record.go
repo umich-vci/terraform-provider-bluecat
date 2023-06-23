@@ -142,15 +142,16 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	}
 
 	mutex.Lock()
-	d.client.Client.Login(d.client.Username, d.client.Password)
+	client := d.client.Client
+	client.Login(d.client.Username, d.client.Password)
 
 	start := 0
 	count := 10
 	absoluteName := data.AbsoluteName.String()
 	options := "hint=^" + absoluteName + "$|"
 
-	hostRecords, err := d.client.Client.GetHostRecordsByHint(start, count, options)
-	if err = gobam.LogoutClientIfError(d.client.Client, err, "Failed to get Host Records by hint"); err != nil {
+	hostRecords, err := client.GetHostRecordsByHint(start, count, options)
+	if err = gobam.LogoutClientIfError(client, err, "Failed to get Host Records by hint"); err != nil {
 		mutex.Unlock()
 		resp.Diagnostics.AddError(
 			"Failed to get Host Records by hint",
@@ -180,7 +181,7 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 
 	if matches == 0 || matches > 1 {
 		err := fmt.Errorf("no exact host record match found for: %s", absoluteName)
-		if err = gobam.LogoutClientIfError(d.client.Client, err, "No exact host record match found for hint"); err != nil {
+		if err = gobam.LogoutClientIfError(client, err, "No exact host record match found for hint"); err != nil {
 			mutex.Unlock()
 			resp.Diagnostics.AddError(
 				"No exact host record match found for hint",
@@ -197,7 +198,7 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 
 	hostRecordProperties, err := parseHostRecordProperties(*hostRecords.Item[matchLocation].Properties)
 	if err != nil {
-		gobam.LogoutClientWithError(d.client.Client, "Error parsing host record properties")
+		gobam.LogoutClientWithError(client, "Error parsing host record properties")
 		mutex.Unlock()
 
 		resp.Diagnostics.AddError(
@@ -215,7 +216,7 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.CustomProperties = hostRecordProperties.customProperties
 	data.TTL = hostRecordProperties.ttl
 
-	if err := d.client.Client.Logout(); err != nil {
+	if err := client.Logout(); err != nil {
 		mutex.Unlock()
 		resp.Diagnostics.AddError(
 			"Failed logout client",
