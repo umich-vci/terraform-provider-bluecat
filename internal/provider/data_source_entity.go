@@ -48,7 +48,7 @@ func (d *entityDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 		MarkdownDescription: "Data source to access the attributes of a BlueCat entity.",
 
 		Attributes: map[string]schema.Attribute{
-			"id": schema.StringAttribute{
+			"id": schema.Int64Attribute{
 				MarkdownDescription: "Entity identifier",
 				Computed:            true,
 			},
