@@ -1,223 +1,340 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/umich-vci/gobam"
 )
 
-func resourceHostRecord() *schema.Resource {
-	return &schema.Resource{
-		Description: "Resource create a host record.",
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &HostRecordResource{}
+var _ resource.ResourceWithImportState = &HostRecordResource{}
 
-		CreateContext: resourceHostRecordCreate,
-		ReadContext:   resourceHostRecordRead,
-		UpdateContext: resourceHostRecordUpdate,
-		DeleteContext: resourceHostRecordDelete,
+func NewHostRecordResource() resource.Resource {
+	return &HostRecordResource{}
+}
 
-		Schema: map[string]*schema.Schema{
-			"addresses": {
-				Description: "The address(es) to be associated with the host record.",
-				Type:        schema.TypeSet,
-				Required:    true,
-				Elem:        &schema.Schema{Type: schema.TypeString},
-			},
-			"dns_zone": {
-				Description: "The DNS zone to create the host record in. Combined with `name` to make the fqdn.  If changed, forces a new resource.",
-				Type:        schema.TypeString,
-				Required:    true,
-				ForceNew:    true,
-			},
-			"name": {
-				Description: "The name of the host record to be created. Combined with `dns_zone` to make the fqdn.",
-				Type:        schema.TypeString,
-				Required:    true,
-			},
-			"view_id": {
-				Description: "The object ID of the View that host record should be created in. If changed, forces a new resource.",
-				Type:        schema.TypeString,
-				Required:    true,
-				ForceNew:    true,
-			},
-			"comments": {
-				Description: "Comments to be associated with the host record.",
-				Type:        schema.TypeString,
-				Optional:    true,
-				Default:     "",
-			},
-			"custom_properties": {
-				Description: "A map of all custom properties associated with the host record.",
-				Type:        schema.TypeMap,
-				Optional:    true,
-				Computed:    true,
-				Elem: &schema.Schema{
-					Type: schema.TypeString,
+// HostRecordResource defines the resource implementation.
+type HostRecordResource struct {
+	client *loginClient
+}
+
+// ExampleResourceModel describes the resource data model.
+type HostRecordResourceModel struct {
+	ID               types.Int64  `tfsdk:"id"`
+	Addresses        types.Set    `tfsdk:"addresses"`
+	DNSZone          types.String `tfsdk:"dns_zone"`
+	Name             types.String `tfsdk:"name"`
+	ViewID           types.Int64  `tfsdk:"view_id"`
+	Comments         types.String `tfsdk:"comments"`
+	CustomProperties types.Map    `tfsdk:"custom_properties"`
+	ReverseRecord    types.Bool   `tfsdk:"reverse_record"`
+	TTL              types.Int64  `tfsdk:"ttl"`
+	AbsoluteName     types.String `tfsdk:"absolute_name"`
+	Properties       types.String `tfsdk:"properties"`
+	Type             types.String `tfsdk:"type"`
+}
+
+func (r *HostRecordResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_example"
+}
+
+func (r *HostRecordResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		// This description is used by the documentation generator and the language server.
+		MarkdownDescription: "Resource create a host record.",
+
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "Host Record identifier",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"reverse_record": {
-				Description: "If a reverse record should be created for addresses.",
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     true,
+			"addresses": schema.SetAttribute{
+				MarkdownDescription: "The address(es) to be associated with the host record.",
+				Required:            true,
+				ElementType:         types.StringType,
 			},
-			"ttl": {
-				Description: "The TTL for the host record.  When set to -1, ignores the TTL.",
-				Type:        schema.TypeInt,
-				Optional:    true,
-				Default:     -1,
+			"dns_zone": schema.StringAttribute{
+				MarkdownDescription: "The DNS zone to create the host record in. Combined with `name` to make the fqdn.  If changed, forces a new resource.",
+				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
-			"absolute_name": {
-				Description: "The absolute name (fqdn) of the host record.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"name": schema.StringAttribute{
+				MarkdownDescription: "The name of the host record to be created. Combined with `dns_zone` to make the fqdn.",
+				Required:            true,
 			},
-			"properties": {
-				Description: "The properties of the host record as returned by the API (pipe delimited).",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"view_id": schema.Int64Attribute{
+				MarkdownDescription: "The object ID of the View that host record should be created in. If changed, forces a new resource.",
+				Required:            true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.RequiresReplace(),
+				},
 			},
-			"type": {
-				Description: "The type of the resource.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"comments": schema.StringAttribute{
+				MarkdownDescription: "Comments to be associated with the host record.",
+				Optional:            true,
+				Default:             stringdefault.StaticString(""),
+			},
+			"custom_properties": schema.MapAttribute{
+				MarkdownDescription: "A map of all custom properties associated with the host record.",
+				Optional:            true,
+				Computed:            true,
+				ElementType:         types.StringType,
+			},
+			"reverse_record": schema.BoolAttribute{
+				MarkdownDescription: "If a reverse record should be created for addresses.",
+				Optional:            true,
+				Default:             booldefault.StaticBool(false),
+			},
+			"ttl": schema.Int64Attribute{
+				MarkdownDescription: "The TTL for the host record.  When set to -1, ignores the TTL.",
+				Optional:            true,
+				Default:             int64default.StaticInt64(-1),
+			},
+			"absolute_name": schema.StringAttribute{
+				MarkdownDescription: "The absolute name (fqdn) of the host record.",
+				Computed:            true,
+			},
+			"properties": schema.StringAttribute{
+				MarkdownDescription: "The properties of the host record as returned by the API (pipe delimited).",
+				Computed:            true,
+			},
+			"type": schema.StringAttribute{
+				MarkdownDescription: "The type of the resource.",
+				Computed:            true,
 			},
 		},
 	}
 }
 
-func resourceHostRecordCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
+func (r *HostRecordResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
+	}
 
-	viewID, err := strconv.ParseInt(d.Get("view_id").(string), 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert view_id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	client, ok := req.ProviderData.(*loginClient)
+
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
 	}
-	absoluteName := d.Get("name").(string) + "." + d.Get("dns_zone").(string)
-	ttl := int64(d.Get("ttl").(int))
-	rawAddresses := d.Get("addresses").(*schema.Set).List()
+
+	r.client = client
+}
+
+func (r *HostRecordResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data *HostRecordResourceModel
+
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	mutex.Lock()
+	client := r.client.Client
+	client.Login(r.client.Username, r.client.Password)
+
+	viewID := data.ViewID.ValueInt64()
+	absoluteName := data.Name.ValueString() + "." + data.DNSZone.ValueString()
+	ttl := data.TTL.ValueInt64()
+
 	addresses := []string{}
-	for x := range rawAddresses {
-		addresses = append(addresses, rawAddresses[x].(string))
+	diag := data.Addresses.ElementsAs(ctx, addresses, false)
+	if diag.HasError() {
+		resp.Diagnostics.AddError(
+			"Parsing addresses failed",
+			"",
+		)
+		gobam.LogoutClientWithError(client, "arsing addresses failed")
+		mutex.Unlock()
+		return
 	}
-	reverseRecord := strconv.FormatBool(d.Get("reverse_record").(bool))
-	comments := d.Get("comments").(string)
+
+	reverseRecord := strconv.FormatBool(data.ReverseRecord.ValueBool())
+	comments := data.Comments.ValueString()
 	properties := "reverseRecord=" + reverseRecord + "|comments=" + comments + "|"
 
-	if customProperties, ok := d.GetOk("custom_properties"); ok {
-		for k, v := range customProperties.(map[string]interface{}) {
-			properties = properties + k + "=" + v.(string) + "|"
-		}
+	customProperties := data.CustomProperties.Elements()
+	for k, v := range customProperties {
+		properties = properties + k + "=" + v.String() + "|"
 	}
 
-	resp, err := client.AddHostRecord(viewID, absoluteName, strings.Join(addresses, ","), ttl, properties)
+	host, err := client.AddHostRecord(viewID, absoluteName, strings.Join(addresses, ","), ttl, properties)
 	if err = gobam.LogoutClientIfError(client, err, "AddHostRecord failed"); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"AddHostRecord failed",
+			err.Error(),
+		)
+		return
 	}
 
-	d.SetId(strconv.FormatInt(resp, 10))
+	data.ID = types.Int64Value(host)
 
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"Failed to logout client",
+			err.Error(),
+		)
+		return
 	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
 
-	return resourceHostRecordRead(ctx, d, meta)
+	// Write logs using the tflog package
+	// Documentation: https://terraform.io/plugin/log
+	tflog.Trace(ctx, "created a resource")
+
+	// Save data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceHostRecordRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
+func (r *HostRecordResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data *HostRecordResourceModel
 
-	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	resp, err := client.GetEntityById(id)
+	mutex.Lock()
+	client := r.client.Client
+	client.Login(r.client.Username, r.client.Password)
+
+	id := data.ID.ValueInt64()
+
+	entity, err := client.GetEntityById(id)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get host record by Id"); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"Failed to get entity by name",
+			fmt.Sprintf("Failed to get entity by name: %s", err.Error()),
+		)
+		return
 	}
 
-	if *resp.Id == 0 {
-		d.SetId("")
-
+	if *entity.Id == 0 {
+		data.ID = types.Int64Null()
 		if err := client.Logout(); err != nil {
 			mutex.Unlock()
-			return diag.FromErr(err)
+			resp.Diagnostics.AddError(
+				"Error logging out after API call",
+				err.Error(),
+			)
+			return
 		}
 
 		mutex.Unlock()
-		return nil
+		return
 	}
 
-	d.Set("name", resp.Name)
-	d.Set("properties", resp.Properties)
-	d.Set("type", resp.Type)
+	data.Name = types.StringPointerValue(entity.Name)
+	data.Properties = types.StringPointerValue(entity.Properties)
+	data.Type = types.StringPointerValue(entity.Type)
 
-	hostRecordProperties, err := parseHostRecordProperties(*resp.Properties)
+	hostRecordProperties, err := parseHostRecordProperties(*entity.Properties)
 	if err = gobam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+
+		resp.Diagnostics.AddError(
+			"Error parsing the host record properties",
+			err.Error(),
+		)
+		return
 	}
 
-	d.Set("absolute_name", hostRecordProperties.absoluteName)
-	d.Set("reverse_record", hostRecordProperties.reverseRecord)
-	d.Set("addresses", hostRecordProperties.addresses)
-	d.Set("ttl", hostRecordProperties.ttl)
-	d.Set("custom_properties", hostRecordProperties.customProperties)
+	data.AbsoluteName = hostRecordProperties.absoluteName
+	data.Addresses = hostRecordProperties.addresses
+	data.CustomProperties = hostRecordProperties.customProperties
+	data.ReverseRecord = hostRecordProperties.reverseRecord
+	data.TTL = hostRecordProperties.ttl
 
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"Failed to logout client",
+			err.Error(),
+		)
+		return
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()
 
-	return nil
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceHostRecordUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
+func (r *HostRecordResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data *HostRecordResourceModel
 
-	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
 	}
-	name := d.Get("name").(string)
-	otype := d.Get("type").(string)
-	ttl := strconv.Itoa(d.Get("ttl").(int))
-	rawAddresses := d.Get("addresses").(*schema.Set).List()
+
+	mutex.Lock()
+	client := r.client.Client
+	client.Login(r.client.Username, r.client.Password)
+
+	id := data.ID.ValueInt64()
+	name := data.Name.ValueString()
+	otype := data.Type.ValueString()
+	ttl := strconv.FormatInt(data.TTL.ValueInt64(), 10)
+
 	addresses := []string{}
-	for x := range rawAddresses {
-		addresses = append(addresses, rawAddresses[x].(string))
+	diag := data.Addresses.ElementsAs(ctx, addresses, false)
+	if diag.HasError() {
+		resp.Diagnostics.AddError(
+			"Parsing addresses failed",
+			"",
+		)
+		gobam.LogoutClientWithError(client, "arsing addresses failed")
+		mutex.Unlock()
+		return
 	}
-	reverseRecord := strconv.FormatBool(d.Get("reverse_record").(bool))
-	comments := d.Get("comments").(string)
+
+	reverseRecord := strconv.FormatBool(data.ReverseRecord.ValueBool())
+	comments := data.Comments.ValueString()
 	properties := "reverseRecord=" + reverseRecord + "|comments=" + comments + "|ttl=" + ttl + "|addresses=" + strings.Join(addresses, ",") + "|"
 
-	if customProperties, ok := d.GetOk("custom_properties"); ok {
-		for k, v := range customProperties.(map[string]string) {
-			properties = properties + k + "=" + v + "|"
-		}
+	customProperties := data.CustomProperties.Elements()
+	for k, v := range customProperties {
+		properties = properties + k + "=" + v.String() + "|"
 	}
 
 	update := gobam.APIEntity{
@@ -227,63 +344,91 @@ func resourceHostRecordUpdate(ctx context.Context, d *schema.ResourceData, meta 
 		Type:       &otype,
 	}
 
-	err = client.Update(&update)
+	err := client.Update(&update)
 	if err = gobam.LogoutClientIfError(client, err, "Host Record Update failed"); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"Host Record Update failed",
+			err.Error(),
+		)
+		return
 	}
 
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"Failed to logout client",
+			err.Error(),
+		)
+		return
 	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
 
-	return resourceHostRecordRead(ctx, d, meta)
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceHostRecordDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
+func (r *HostRecordResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data *HostRecordResourceModel
 
-	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	resp, err := client.GetEntityById(id)
+	mutex.Lock()
+	client := r.client.Client
+	client.Login(r.client.Username, r.client.Password)
+
+	id := data.ID.ValueInt64()
+
+	entity, err := client.GetEntityById(id)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get host record by Id"); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"Failed to get host record by id",
+			err.Error(),
+		)
+		return
 	}
 
-	if *resp.Id == 0 {
+	if *entity.Id == 0 {
 		if err := client.Logout(); err != nil {
 			mutex.Unlock()
-			return diag.FromErr(err)
+			resp.Diagnostics.AddError(
+				"Failed to logout client",
+				err.Error(),
+			)
+			return
 		}
 
 		mutex.Unlock()
-		return nil
+		return
 	}
 
 	err = client.Delete(id)
 	if err = gobam.LogoutClientIfError(client, err, "Delete failed"); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"Host Record Delete failed",
+			err.Error(),
+		)
+		return
 	}
 
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"Failed to logout client",
+			err.Error(),
+		)
+		return
 	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
+}
 
-	return nil
+func (r *HostRecordResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
