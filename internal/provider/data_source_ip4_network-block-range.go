@@ -341,7 +341,7 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, error) 
 				}
 				defaultDomainsSet, diag := types.SetValue(types.StringType, defaultDomainsList)
 				if diag.HasError() {
-					return networkProperties, fmt.Errorf("Error creating defaultDomains set")
+					return networkProperties, fmt.Errorf("error creating defaultDomains set")
 				}
 				networkProperties.defaultDomains = defaultDomainsSet
 			case "defaultView":

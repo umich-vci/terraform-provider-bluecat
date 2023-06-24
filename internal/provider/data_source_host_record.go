@@ -285,7 +285,7 @@ func parseHostRecordProperties(properties string) (hostRecordProperties, error) 
 				}
 				addressSet, diag := types.SetValue(types.StringType, addressList)
 				if diag.HasError() {
-					return hrProperties, fmt.Errorf("Error creating address set")
+					return hrProperties, fmt.Errorf("error creating address set")
 				}
 				hrProperties.addresses = addressSet
 			case "addressIds":
