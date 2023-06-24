@@ -215,6 +215,10 @@ func (p *blueCatProvider) Resources(ctx context.Context) []func() resource.Resou
 func (p *blueCatProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewEntityDataSource,
+		NewHostRecordDataSource,
+		NewIP4AddressDataSource,
+		NewIP4NBRDataSource,
+		NewIP4NetworkDataSource,
 	}
 }
 
