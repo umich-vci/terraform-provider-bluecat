@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
@@ -227,5 +228,30 @@ func New(version string) func() provider.Provider {
 		return &blueCatProvider{
 			version: version,
 		}
+	}
+}
+
+func clientLogin(loginClient *loginClient, mutex *sync.Mutex, diag diag.Diagnostics) *gobam.ProteusAPI {
+	client := (*loginClient).Client
+	username := (*loginClient).Username
+	password := (*loginClient).Password
+
+	mutex.Lock()
+	err := client.Login(username, password)
+	if err != nil {
+		mutex.Unlock()
+		diag.AddError("Failed to login client", err.Error())
+		return nil
+	}
+	return &client
+}
+
+func clientLogout(loginClient *gobam.ProteusAPI, mutex *sync.Mutex, diag diag.Diagnostics) {
+	client := *loginClient
+
+	err := client.Logout()
+	mutex.Unlock()
+	if err != nil {
+		diag.AddError("Failed to logout client:", err.Error())
 	}
 }

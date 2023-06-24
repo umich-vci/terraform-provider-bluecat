@@ -6,10 +6,8 @@ package provider
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
-	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -340,29 +338,4 @@ func (r *IP4AddressResource) Delete(ctx context.Context, req resource.DeleteRequ
 
 func (r *IP4AddressResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-}
-
-func clientLogin(loginClient *loginClient, mutex *sync.Mutex, diag diag.Diagnostics) *gobam.ProteusAPI {
-	client := (*loginClient).Client
-	username := (*loginClient).Username
-	password := (*loginClient).Password
-
-	mutex.Lock()
-	err := client.Login(username, password)
-	if err != nil {
-		mutex.Unlock()
-		diag.AddError("Failed to login client", err.Error())
-		return nil
-	}
-	return &client
-}
-
-func clientLogout(loginClient *gobam.ProteusAPI, mutex *sync.Mutex, diag diag.Diagnostics) {
-	client := *loginClient
-
-	err := client.Logout()
-	mutex.Unlock()
-	if err != nil {
-		diag.AddError("Failed to logout client:", err.Error())
-	}
 }
