@@ -1,228 +1,311 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
 	"context"
+	"fmt"
 	"log"
-	"strconv"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/umich-vci/gobam"
 )
 
-func dataSourceIP4Network() *schema.Resource {
-	return &schema.Resource{
-		Description: "Data source to access the attributes of an IPv4 network from a hint based search.",
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ datasource.DataSource = &IP4NetworkDataSource{}
 
-		ReadContext: dataSourceIP4NetworkRead,
+func NewIP4NetworkDataSource() datasource.DataSource {
+	return &IP4NetworkDataSource{}
+}
 
-		Schema: map[string]*schema.Schema{
-			"hint": {
-				Description: "Hint to find the IP4Network",
-				Type:        schema.TypeString,
-				Required:    true,
+// IP4NetworkDataSource defines the data source implementation.
+type IP4NetworkDataSource struct {
+	client *loginClient
+}
+
+// IP4NetworkDataSourceModel describes the data source data model.
+type IP4NetworkDataSourceModel struct {
+	ID                        types.Int64  `tfsdk:"id"`
+	ContainerID               types.Int64  `tfsdk:"container_id"`
+	Hint                      types.String `tfsdk:"hint"`
+	Type                      types.String `tfsdk:"type"`
+	AddressesFree             types.Int64  `tfsdk:"addresses_free"`
+	AddressesInUse            types.Int64  `tfsdk:"addresses_in_use"`
+	AllowDuplicateHost        types.String `tfsdk:"allow_duplicate_host"`
+	CIDR                      types.String `tfsdk:"cidr"`
+	CustomProperties          types.Map    `tfsdk:"custom_properties"`
+	DefaultDomains            types.Set    `tfsdk:"default_domain"`
+	DefaultView               types.Int64  `tfsdk:"default_view"`
+	DNSRestrictions           types.Set    `tfsdk:"dns_restrictions"`
+	Gateway                   types.String `tfsdk:"gateway"`
+	InheritAllowDuplicateHost types.Bool   `tfsdk:"inherit_allow_duplicate_host"`
+	InheritDefaultDomains     types.Bool   `tfsdk:"inherit_default_domain"`
+	InheritDefaultView        types.Bool   `tfsdk:"inherit_default_view"`
+	InheritDNSRestrictions    types.Bool   `tfsdk:"inherit_dns_restrictions"`
+	InheritPingBeforeAssign   types.Bool   `tfsdk:"inherit_ping_before_assign"`
+	LocationCode              types.String `tfsdk:"location_code"`
+	LocationInherited         types.Bool   `tfsdk:"location_inherited"`
+	Name                      types.String `tfsdk:"name"`
+	PingBeforeAssign          types.String `tfsdk:"ping_before_assign"`
+	Properties                types.String `tfsdk:"properties"`
+	Template                  types.Int64  `tfsdk:"template"`
+}
+
+func (d *IP4NetworkDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_ip4_network"
+}
+
+func (d *IP4NetworkDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		// This description is used by the documentation generator and the language server.
+		MarkdownDescription: "Data source to access the attributes of an IPv4 network from a hint based search.",
+
+		Attributes: map[string]schema.Attribute{
+			"id": schema.Int64Attribute{
+				MarkdownDescription: "Example identifier",
+				Computed:            true,
 			},
-			"container_id": {
-				Description: "The object ID of a container that contains the specified IPv4 network.",
-				Type:        schema.TypeString,
-				Required:    true,
+			"hint": schema.StringAttribute{
+				MarkdownDescription: "Hint to find the IP4Network",
+				Required:            true,
 			},
-			"type": {
-				Description: "The type of the IP4Network",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"container_id": schema.Int64Attribute{
+				MarkdownDescription: "The object ID of a container that contains the specified IPv4 network.",
+				Required:            true,
 			},
-			"addresses_free": {
-				Description: "The number of addresses unallocated/free on the network.",
-				Type:        schema.TypeInt,
-				Computed:    true,
+			"type": schema.StringAttribute{
+				MarkdownDescription: "The type of the IP4Network",
+				Computed:            true,
 			},
-			"addresses_in_use": {
-				Description: "The number of addresses allocated/in use on the network.",
-				Type:        schema.TypeInt,
-				Computed:    true,
+			"addresses_free": schema.StringAttribute{
+				MarkdownDescription: "The number of addresses unallocated/free on the network.",
+				Computed:            true,
 			},
-			"allow_duplicate_host": {
-				Description: "Duplicate host names check.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"addresses_in_use": schema.Int64Attribute{
+				MarkdownDescription: "The number of addresses allocated/in use on the network.",
+				Computed:            true,
 			},
-			"cidr": {
-				Description: "The CIDR address of the IPv4 network.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"allow_duplicate_host": schema.StringAttribute{
+				MarkdownDescription: "Duplicate host names check.",
+				Computed:            true,
 			},
-			"custom_properties": {
-				Description: "A map of all custom properties associated with the IPv4 network.",
-				Type:        schema.TypeMap,
-				Computed:    true,
-				Elem: &schema.Schema{
-					Type: schema.TypeString,
-				},
+			"cidr": schema.StringAttribute{
+				MarkdownDescription: "The CIDR address of the IPv4 network.",
+				Computed:            true,
 			},
-			"default_domains": {
-				Description: "TODO",
-				Type:        schema.TypeSet,
-				Computed:    true,
-				Elem:        &schema.Schema{Type: schema.TypeString},
+			"custom_properties": schema.MapAttribute{
+				MarkdownDescription: "A map of all custom properties associated with the IPv4 network.",
+				Computed:            true,
+				ElementType:         types.StringType,
 			},
-			"default_view": {
-				Description: "The object id of the default DNS View for the network.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"default_domains": schema.SetAttribute{
+				MarkdownDescription: "TODO",
+				Computed:            true,
+				ElementType:         types.Int64Type,
 			},
-			"dns_restrictions": {
-				Description: "TODO",
-				Type:        schema.TypeSet,
-				Computed:    true,
-				Elem:        &schema.Schema{Type: schema.TypeString},
+			"default_view": schema.Int64Attribute{
+				MarkdownDescription: "The object id of the default DNS View for the network.",
+				Computed:            true,
 			},
-			"gateway": {
-				Description: "The gateway of the IPv4 network.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"dns_restrictions": schema.SetAttribute{
+				MarkdownDescription: "TODO",
+				Computed:            true,
+				ElementType:         types.Int64Type,
 			},
-			"inherit_allow_duplicate_host": {
-				Description: "Duplicate host names check is inherited.",
-				Type:        schema.TypeBool,
-				Computed:    true,
+			"gateway": schema.StringAttribute{
+				MarkdownDescription: "The gateway of the IPv4 network.",
+				Computed:            true,
 			},
-			"inherit_default_domains": {
-				Description: "Default domains are inherited.",
-				Type:        schema.TypeBool,
-				Computed:    true,
+			"inherit_allow_duplicate_host": schema.BoolAttribute{
+				MarkdownDescription: "Duplicate host names check is inherited.",
+				Computed:            true,
 			},
-			"inherit_default_view": {
-				Description: "The default DNS View is inherited.",
-				Type:        schema.TypeBool,
-				Computed:    true,
+			"inherit_default_domains": schema.BoolAttribute{
+				MarkdownDescription: "Default domains are inherited.",
+				Computed:            true,
 			},
-			"inherit_dns_restrictions": {
-				Description: "DNS restrictions are inherited.",
-				Type:        schema.TypeBool,
-				Computed:    true,
+			"inherit_default_view": schema.BoolAttribute{
+				MarkdownDescription: "The default DNS View is inherited.",
+				Computed:            true,
 			},
-			"inherit_ping_before_assign": {
-				Description: "The network pings an address before assignment is inherited.",
-				Type:        schema.TypeBool,
-				Computed:    true,
+			"inherit_dns_restrictions": schema.BoolAttribute{
+				MarkdownDescription: "DNS restrictions are inherited.",
+				Computed:            true,
 			},
-			"location_code": {
-				Description: "TODO",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"inherit_ping_before_assign": schema.BoolAttribute{
+				MarkdownDescription: "The network pings an address before assignment is inherited.",
+				Computed:            true,
 			},
-			"location_inherited": {
-				Description: "TODO",
-				Type:        schema.TypeBool,
-				Computed:    true,
+			"location_code": schema.StringAttribute{
+				MarkdownDescription: "TODO",
+				Computed:            true,
 			},
-			"name": {
-				Description: "The name assigned the resource.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"location_inherited": schema.BoolAttribute{
+				MarkdownDescription: "TODO",
+				Computed:            true,
 			},
-			"ping_before_assign": {
-				Description: "The network pings an address before assignment.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"name": schema.StringAttribute{
+				MarkdownDescription: "The name assigned the resource.",
+				Computed:            true,
 			},
-			"properties": {
-				Description: "The properties of the resource as returned by the API (pipe delimited).",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"ping_before_assign": schema.StringAttribute{
+				MarkdownDescription: "The network pings an address before assignment.",
+				Computed:            true,
 			},
-			"template": {
-				Description: "TODO",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"properties": schema.StringAttribute{
+				MarkdownDescription: "The properties of the resource as returned by the API (pipe delimited).",
+				Computed:            true,
+			},
+			"template": schema.Int64Attribute{
+				MarkdownDescription: "TODO",
+				Computed:            true,
 			},
 		},
 	}
 }
 
-func dataSourceIP4NetworkRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
-
-	containerID, err := strconv.ParseInt(d.Get("container_id").(string), 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert container_id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+func (d *IP4NetworkDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
 	}
-	hint := d.Get("hint").(string)
+
+	client, ok := req.ProviderData.(*loginClient)
+
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Data Source Configure Type",
+			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	d.client = client
+}
+
+func (d *IP4NetworkDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data IP4NetworkDataSourceModel
+
+	// Read Terraform configuration data into the model
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	mutex.Lock()
+	client := d.client.Client
+	client.Login(d.client.Username, d.client.Password)
+
+	containerID := data.ContainerID.ValueInt64()
+	hint := data.Hint.ValueString()
 	options := "hint=" + hint
 
 	hintResp, err := client.GetIP4NetworksByHint(containerID, 0, 1, options)
 	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint"); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"Failed to get IP4 Networks by hint",
+			err.Error(),
+		)
+		return
 	}
 
 	if len(hintResp.Item) > 1 || len(hintResp.Item) == 0 {
-		var diags diag.Diagnostics
 		err := gobam.LogoutClientWithError(client, "Network lookup error")
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error logging out",
+				err.Error(),
+			)
+		}
 		mutex.Unlock()
 
-		diags = append(diags, diag.FromErr(err)...)
-		diags = append(diags, diag.Errorf("Hint %s returned %d networks but should have returned 1", hint, len(hintResp.Item))...)
-
-		return diags
+		resp.Diagnostics.AddError(
+			"Network lookup error",
+			fmt.Sprintf("Hint %s returned %d networks but the data source only supports 1", hint, len(hintResp.Item)),
+		)
+		return
 	}
 
-	d.SetId(strconv.FormatInt(*hintResp.Item[0].Id, 10))
+	data.ID = types.Int64PointerValue(hintResp.Item[0].Id)
 
 	// GetIP4NetworksByHint doesn't seem to return all properties so use the ID returned by it to call GetEntityById
-	resp, err := client.GetEntityById(*hintResp.Item[0].Id)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint"); err != nil {
+	entity, err := client.GetEntityById(*hintResp.Item[0].Id)
+	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Network via Entity ID"); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"Failed to get IP4 Network via Entity ID",
+			err.Error(),
+		)
+		return
 	}
 
-	d.Set("name", resp.Name)
-	d.Set("properties", resp.Properties)
-	d.Set("type", resp.Type)
+	data.Name = types.StringPointerValue(entity.Name)
+	data.Properties = types.StringPointerValue(entity.Properties)
+	data.Type = types.StringPointerValue(entity.Type)
 
-	networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)
+	networkProperties, err := parseIP4NetworkProperties(*entity.Properties)
 	if err = gobam.LogoutClientIfError(client, err, "Error parsing network properties"); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"Failed to get IP4 Network via Entity ID",
+			err.Error(),
+		)
+		return
 	}
 
-	d.Set("cidr", networkProperties.CIDR)
-	d.Set("template", networkProperties.Template)
-	d.Set("gateway", networkProperties.Gateway)
-	d.Set("default_domains", networkProperties.DefaultDomains)
-	d.Set("default_view", networkProperties.DefaultView)
-	d.Set("dns_restrictions", networkProperties.DefaultDomains)
-	d.Set("allow_duplicate_host", networkProperties.AllowDuplicateHost)
-	d.Set("ping_before_assign", networkProperties.PingBeforeAssign)
-	d.Set("inherit_allow_duplicate_host", networkProperties.InheritAllowDuplicateHost)
-	d.Set("inherit_ping_before_assign", networkProperties.InheritPingBeforeAssign)
-	d.Set("inherit_dns_restrictions", networkProperties.InheritDNSRestrictions)
-	d.Set("inherit_default_domains", networkProperties.InheritDefaultDomains)
-	d.Set("inherit_default_view", networkProperties.InheritDefaultView)
-	d.Set("location_code", networkProperties.LocationCode)
-	d.Set("location_inherited", networkProperties.LocationInherited)
-	d.Set("custom_properties", networkProperties.CustomProperties)
+	data.CIDR = networkProperties.cidr
+	data.Template = networkProperties.template
 
-	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.CIDR, client)
+	data.Gateway = networkProperties.gateway
+	data.DefaultDomains = networkProperties.defaultDomains
+	data.DefaultView = networkProperties.defaultView
+	data.DNSRestrictions = networkProperties.dnsRestrictions
+	data.AllowDuplicateHost = networkProperties.allowDuplicateHost
+	data.PingBeforeAssign = networkProperties.pingBeforeAssign
+	data.InheritAllowDuplicateHost = networkProperties.inheritAllowDuplicateHost
+	data.InheritPingBeforeAssign = networkProperties.inheritPingBeforeAssign
+	data.InheritDNSRestrictions = networkProperties.inheritDNSRestrictions
+	data.InheritDefaultDomains = networkProperties.inheritDefaultDomains
+	data.InheritDefaultView = networkProperties.inheritDefaultView
+	data.LocationCode = networkProperties.locationCode
+	data.LocationInherited = networkProperties.locationInherited
+	data.CustomProperties = networkProperties.customProperties
+
+	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
 	if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"Error calculating network usage",
+			err.Error(),
+		)
+		return
 	}
-
-	d.Set("addresses_in_use", addressesInUse)
-	d.Set("addresses_free", addressesFree)
+	data.AddressesInUse = types.Int64Value(addressesInUse)
+	data.AddressesFree = types.Int64Value(addressesFree)
 
 	// logout client
 	if err := client.Logout(); err != nil {
 		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"Failed to logout client",
+			err.Error(),
+		)
+		return
 	}
 	log.Printf("[INFO] BlueCat Logout was successful")
 	mutex.Unlock()
 
-	return nil
+	// Write logs using the tflog package
+	// Documentation: https://terraform.io/plugin/log
+	tflog.Trace(ctx, "read a data source")
+
+	// Save data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
