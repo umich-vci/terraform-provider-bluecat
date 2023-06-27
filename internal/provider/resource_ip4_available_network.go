@@ -82,6 +82,7 @@ func (r *IP4AvailableNetworkResource) Schema(ctx context.Context, req resource.S
 			"random": schema.BoolAttribute{
 				MarkdownDescription: "By default, the network with the most free IP addresses is returned. By setting this to `true` a random network from the list will be returned instead. The network will be validated to have at least 1 free IP address.",
 				Optional:            true,
+				Computed:            true,
 				Default:             booldefault.StaticBool(false),
 				PlanModifiers: []planmodifier.Bool{
 					boolplanmodifier.RequiresReplace(),

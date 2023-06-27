@@ -96,6 +96,7 @@ func (r *HostRecordResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"comments": schema.StringAttribute{
 				MarkdownDescription: "Comments to be associated with the host record.",
 				Optional:            true,
+				Computed:            true,
 				Default:             stringdefault.StaticString(""),
 			},
 			"custom_properties": schema.MapAttribute{
@@ -107,11 +108,13 @@ func (r *HostRecordResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"reverse_record": schema.BoolAttribute{
 				MarkdownDescription: "If a reverse record should be created for addresses.",
 				Optional:            true,
+				Computed:            true,
 				Default:             booldefault.StaticBool(false),
 			},
 			"ttl": schema.Int64Attribute{
 				MarkdownDescription: "The TTL for the host record.  When set to -1, ignores the TTL.",
 				Optional:            true,
+				Computed:            true,
 				Default:             int64default.StaticInt64(-1),
 			},
 			"absolute_name": schema.StringAttribute{

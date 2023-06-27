@@ -99,6 +99,7 @@ func (r *IP4NetworkResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"is_larger_allowed": schema.BoolAttribute{
 				MarkdownDescription: "(Optional) Is it ok to return a network that is larger than the size specified?",
 				Optional:            true,
+				Computed:            true,
 				Default:             booldefault.StaticBool(false),
 				PlanModifiers: []planmodifier.Bool{
 					boolplanmodifier.RequiresReplace(),
@@ -107,6 +108,7 @@ func (r *IP4NetworkResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"traversal_method": schema.StringAttribute{
 				MarkdownDescription: "The traversal method used to find the range to allocate the network. Must be one of \"NO_TRAVERSAL\", \"DEPTH_FIRST\", or \"BREADTH_FIRST\".",
 				Optional:            true,
+				Computed:            true,
 				Default:             stringdefault.StaticString("NO_TRAVERSAL"),
 				Validators: []validator.String{
 					stringvalidator.OneOf("NO_TRAVERSAL", "DEPTH_FIRST", "BREADTH_FIRST"),

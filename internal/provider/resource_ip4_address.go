@@ -87,6 +87,7 @@ func (r *IP4AddressResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"action": schema.StringAttribute{
 				MarkdownDescription: "The action to take on the next available IPv4 address.  Must be one of: \"MAKE_STATIC\", \"MAKE_RESERVED\", or \"MAKE_DHCP_RESERVED\". If changed, forces a new resource.",
 				Optional:            true,
+				Computed:            true,
 				Default:             stringdefault.StaticString("MAKE_STATIC"),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
@@ -104,6 +105,7 @@ func (r *IP4AddressResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"mac_address": schema.StringAttribute{
 				MarkdownDescription: "The MAC address to associate with the IPv4 address.",
 				Optional:            true,
+				Computed:            true,
 				Default:             stringdefault.StaticString(""),
 			},
 			"address": schema.StringAttribute{
