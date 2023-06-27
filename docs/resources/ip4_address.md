@@ -29,22 +29,20 @@ output "allocated_address" {
 
 ### Required
 
-- `configuration_id` (String) The object ID of the Configuration that will hold the new address. If changed, forces a new resource.
+- `configuration_id` (Number) The object ID of the Configuration that will hold the new address. If changed, forces a new resource.
 - `name` (String) The name assigned to the IPv4 address. This is not related to DNS.
-- `parent_id` (String) The object ID of the Configuration, Block, or Network to find the next available IPv4 address in. If changed, forces a new resource.
+- `parent_id` (Number) The object ID of the Configuration, Block, or Network to find the next available IPv4 address in. If changed, forces a new resource.
 
 ### Optional
 
-- `action` (String) The action to take on the next available IPv4 address.  Must be one of: "MAKE_STATIC", "MAKE_RESERVED", or "MAKE_DHCP_RESERVED". If changed, forces a new resource. Defaults to `MAKE_STATIC`.
+- `action` (String) The action to take on the next available IPv4 address.  Must be one of: "MAKE_STATIC", "MAKE_RESERVED", or "MAKE_DHCP_RESERVED". If changed, forces a new resource.
 - `custom_properties` (Map of String) A map of all custom properties associated with the IPv4 address.
-- `mac_address` (String) The MAC address to associate with the IPv4 address. Defaults to ``.
+- `mac_address` (String) The MAC address to associate with the IPv4 address.
 
 ### Read-Only
 
 - `address` (String) The IPv4 address that was allocated.
-- `id` (String) The ID of this resource.
+- `id` (Number) IP4 address identifier
 - `properties` (String) The properties of the IPv4 address as returned by the API (pipe delimited).
 - `state` (String) The state of the IPv4 address.
 - `type` (String) The type of the resource.
-
-

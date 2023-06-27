@@ -32,12 +32,10 @@ output "network_id" {
 ### Optional
 
 - `keepers` (Map of String) An arbitrary map of values. If this argument is changed, then the resource will be recreated.
-- `random` (Boolean) By default, the network with the most free IP addresses is returned. By setting this to `true` a random network from the list will be returned instead. The network will be validated to have at least 1 free IP address. Defaults to `false`.
+- `random` (Boolean) By default, the network with the most free IP addresses is returned. By setting this to `true` a random network from the list will be returned instead. The network will be validated to have at least 1 free IP address.
 - `seed` (String) A seed for the `random` argument's generator. Can be used to try to get more predictable results from the random selection. The results will not be fixed however.
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
+- `id` (String) Example identifier
 - `network_id` (Number) The network ID of the network selected by the resource.
-
-
