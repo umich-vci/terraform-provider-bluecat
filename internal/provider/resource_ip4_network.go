@@ -1,142 +1,221 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"strconv"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/umich-vci/gobam"
 )
 
-func resourceIP4Network() *schema.Resource {
-	return &schema.Resource{
-		Description: "Resource to create an IPv4 network.",
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &IP4NetworkResource{}
+var _ resource.ResourceWithImportState = &IP4NetworkResource{}
 
-		CreateContext: resourceIP4NetworkCreate,
-		ReadContext:   resourceIP4NetworkRead,
-		UpdateContext: resourceIP4NetworkUpdate,
-		DeleteContext: resourceIP4NetworkDelete,
+func NewIP4NetworkResource() resource.Resource {
+	return &IP4NetworkResource{}
+}
 
-		Schema: map[string]*schema.Schema{
-			"name": {
-				Description: "The display name of the IPv4 network.",
-				Type:        schema.TypeString,
-				Required:    true,
+// IP4NetworkResource defines the resource implementation.
+type IP4NetworkResource struct {
+	client *loginClient
+}
+
+// IP4NetworkResourceModel describes the resource data model.
+type IP4NetworkResourceModel struct {
+	ID                        types.Int64  `tfsdk:"id"`
+	Name                      types.String `tfsdk:"name"`
+	ParentID                  types.Int64  `tfsdk:"parent_id"`
+	Size                      types.Int64  `tfsdk:"size"`
+	IsLargerAllowed           types.Bool   `tfsdk:"is_larger_allowed"`
+	TraversalMethod           types.String `tfsdk:"traversal_method"`
+	AddressesInUse            types.Int64  `tfsdk:"addresses_in_use"`
+	AddressesFree             types.Int64  `tfsdk:"addresses_free"`
+	AllowDuplicateHost        types.String `tfsdk:"allow_duplicate_host"`
+	CIDR                      types.String `tfsdk:"cidr"`
+	CustomProperties          types.Map    `tfsdk:"custom_properties"`
+	DefaultView               types.Int64  `tfsdk:"default_view"`
+	Gateway                   types.String `tfsdk:"gateway"`
+	InheritAllowDuplicateHost types.Bool   `tfsdk:"inherit_allow_duplicate_host"`
+	InheritDefaultDomains     types.Bool   `tfsdk:"inherit_default_domains"`
+	InheritDefaultView        types.Bool   `tfsdk:"inherit_default_view"`
+	InheritDNSRestrictions    types.Bool   `tfsdk:"inherit_dns_restrictions"`
+	InheritPingBeforeAssign   types.Bool   `tfsdk:"inherit_ping_before_assign"`
+	PingBeforeAssign          types.String `tfsdk:"ping_before_assign"`
+	Properties                types.String `tfsdk:"properties"`
+	Type                      types.String `tfsdk:"type"`
+}
+
+func (r *IP4NetworkResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_example"
+}
+
+func (r *IP4NetworkResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		// This description is used by the documentation generator and the language server.
+		MarkdownDescription: "Resource to create an IPv4 network.",
+
+		Attributes: map[string]schema.Attribute{
+			"id": schema.Int64Attribute{
+				MarkdownDescription: "IPv4 Network identifier.",
+				Computed:            true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
-			"parent_id": {
-				Description: "The object ID of the parent object that will contain the new IPv4 network. If this argument is changed, then the resource will be recreated.",
-				Type:        schema.TypeString,
-				Required:    true,
-				ForceNew:    true,
+			"name": schema.StringAttribute{
+				MarkdownDescription: "The display name of the IPv4 network.",
+				Required:            true,
 			},
-			"size": {
-				Description: "The size of the IPv4 network expressed as a power of 2. For example, 256 would create a /24. If this argument is changed, then the resource will be recreated.",
-				Type:        schema.TypeInt,
-				Required:    true,
-				ForceNew:    true,
+			"parent_id": schema.Int64Attribute{
+				MarkdownDescription: "The object ID of the parent object that will contain the new IPv4 network. If this argument is changed, then the resource will be recreated.",
+				Required:            true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.RequiresReplace(),
+				},
 			},
-			"is_larger_allowed": {
-				Description: "(Optional) Is it ok to return a network that is larger than the size specified?",
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     false,
+			"size": schema.Int64Attribute{
+				MarkdownDescription: "The size of the IPv4 network expressed as a power of 2. For example, 256 would create a /24. If this argument is changed, then the resource will be recreated.",
+				Required:            true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.RequiresReplace(),
+				},
 			},
-			"traversal_method": {
-				Description:  "The traversal method used to find the range to allocate the network. Must be one of \"NO_TRAVERSAL\", \"DEPTH_FIRST\", or \"BREADTH_FIRST\".",
-				Type:         schema.TypeString,
-				Optional:     true,
-				Default:      "NO_TRAVERSAL",
-				ValidateFunc: validation.StringInSlice([]string{"NO_TRAVERSAL", "DEPTH_FIRST", "BREADTH_FIRST"}, false),
+			"is_larger_allowed": schema.BoolAttribute{
+				MarkdownDescription: "(Optional) Is it ok to return a network that is larger than the size specified?",
+				Optional:            true,
+				Default:             booldefault.StaticBool(false),
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
 			},
-			"addresses_in_use": {
-				Description: "The number of addresses allocated/in use on the network.",
-				Type:        schema.TypeInt,
-				Computed:    true,
+			"traversal_method": schema.StringAttribute{
+				MarkdownDescription: "The traversal method used to find the range to allocate the network. Must be one of \"NO_TRAVERSAL\", \"DEPTH_FIRST\", or \"BREADTH_FIRST\".",
+				Optional:            true,
+				Default:             stringdefault.StaticString("NO_TRAVERSAL"),
+				Validators: []validator.String{
+					stringvalidator.OneOf("NO_TRAVERSAL", "DEPTH_FIRST", "BREADTH_FIRST"),
+				},
 			},
-			"addresses_free": {
-				Description: "The number of addresses unallocated/free on the network.",
-				Type:        schema.TypeInt,
-				Computed:    true,
+			"addresses_in_use": schema.Int64Attribute{
+				MarkdownDescription: "The number of addresses allocated/in use on the network.",
+				Computed:            true,
 			},
-			"allow_duplicate_host": {
-				Description: "Duplicate host names check.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"addresses_free": schema.Int64Attribute{
+				MarkdownDescription: "The number of addresses unallocated/free on the network.",
+				Computed:            true,
 			},
-			"cidr": {
-				Description: "The CIDR address of the IPv4 network.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"allow_duplicate_host": schema.StringAttribute{
+				MarkdownDescription: "Duplicate host names check.",
+				Computed:            true,
 			},
-			"default_view": {
-				Description: "The object id of the default DNS View for the network.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"cidr": schema.StringAttribute{
+				MarkdownDescription: "The CIDR address of the IPv4 network.",
+				Computed:            true,
 			},
-			"gateway": {
-				Description: "The gateway of the IPv4 network.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"custom_properties": schema.MapAttribute{
+				MarkdownDescription: "A map of all custom properties associated with the IPv4 network.",
+				Computed:            true,
+				ElementType:         types.StringType,
 			},
-			"inherit_allow_duplicate_host": {
-				Description: "Duplicate host names check is inherited.",
-				Type:        schema.TypeBool,
-				Computed:    true,
+			"default_view": schema.Int64Attribute{
+				MarkdownDescription: "The object id of the default DNS View for the network.",
+				Computed:            true,
 			},
-			"inherit_default_domains": {
-				Description: "Default domains are inherited.",
-				Type:        schema.TypeBool,
-				Computed:    true,
+			"gateway": schema.StringAttribute{
+				MarkdownDescription: "The gateway of the IPv4 network.",
+				Computed:            true,
 			},
-			"inherit_default_view": {
-				Description: "The default DNS Viewis inherited.",
-				Type:        schema.TypeBool,
-				Computed:    true,
+			"inherit_allow_duplicate_host": schema.BoolAttribute{
+				MarkdownDescription: "Duplicate host names check is inherited.",
+				Computed:            true,
 			},
-			"inherit_dns_restrictions": {
-				Description: "DNS restrictions are inherited.",
-				Type:        schema.TypeBool,
-				Computed:    true,
+			"inherit_default_domains": schema.BoolAttribute{
+				MarkdownDescription: "Default domains are inherited.",
+				Computed:            true,
 			},
-			"inherit_ping_before_assign": {
-				Description: "The network pings an address before assignment is inherited.",
-				Type:        schema.TypeBool,
-				Computed:    true,
+			"inherit_default_view": schema.BoolAttribute{
+				MarkdownDescription: "The default DNS Viewis inherited.",
+				Computed:            true,
 			},
-			"ping_before_assign": {
-				Description: "The network pings an address before assignment.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"inherit_dns_restrictions": schema.BoolAttribute{
+				MarkdownDescription: "DNS restrictions are inherited.",
+				Computed:            true,
 			},
-			"properties": {
-				Description: "The properties of the resource as returned by the API (pipe delimited).",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"inherit_ping_before_assign": schema.BoolAttribute{
+				MarkdownDescription: "The network pings an address before assignment is inherited.",
+				Computed:            true,
 			},
-			"type": {
-				Description: "The type of the resource.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"ping_before_assign": schema.StringAttribute{
+				MarkdownDescription: "The network pings an address before assignment.",
+				Computed:            true,
+			},
+			"properties": schema.StringAttribute{
+				MarkdownDescription: "The properties of the resource as returned by the API (pipe delimited).",
+				Computed:            true,
+			},
+			"type": schema.StringAttribute{
+				MarkdownDescription: "The type of the resource.",
+				Computed:            true,
 			},
 		},
 	}
 }
-func resourceIP4NetworkCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
 
-	parentID, err := strconv.ParseInt(d.Get("parent_id").(string), 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+func (r *IP4NetworkResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
 	}
-	size := int64(d.Get("size").(int))
-	isLargerAllowed := d.Get("is_larger_allowed").(bool)
-	traversalMethod := d.Get("traversal_method").(string)
+
+	client, ok := req.ProviderData.(*loginClient)
+
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	r.client = client
+}
+
+func (r *IP4NetworkResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data *IP4NetworkResourceModel
+
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	client := *clientLogin(r.client, mutex, resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	parentID := data.ParentID.ValueInt64()
+	size := data.Size.ValueInt64()
+	isLargerAllowed := data.IsLargerAllowed.ValueBool()
+	traversalMethod := data.TraversalMethod.ValueString()
 	autoCreate := true     //we always want to create since this is a resource after all
 	reuseExisting := false //we never want to use an existing network created outside terraform
 	Type := "IP4Network"   //Since this is the ip4_network resource we are setting the type
@@ -145,16 +224,19 @@ func resourceIP4NetworkCreate(ctx context.Context, d *schema.ResourceData, meta 
 	properties = properties + "autoCreate=" + strconv.FormatBool(autoCreate) + "|"
 	properties = properties + "traversalMethod=" + traversalMethod + "|"
 
-	resp, err := client.GetNextAvailableIPRange(parentID, size, Type, properties)
-	if err = gobam.LogoutClientIfError(client, err, "Failed on GetNextAvailableIP4Network"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	network, err := client.GetNextAvailableIPRange(parentID, size, Type, properties)
+	if err != nil {
+		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.AddError(
+			"Failed to create IP4 Network",
+			err.Error(),
+		)
+		return
 	}
 
-	d.SetId(strconv.FormatInt(*resp.Id, 10))
-
-	id := *resp.Id
-	name := d.Get("name").(string)
+	data.ID = types.Int64PointerValue(network.Id)
+	name := data.Name.ValueString()
+	id := *network.Id
 	properties = ""
 	otype := "IP4Network"
 
@@ -166,104 +248,129 @@ func resourceIP4NetworkCreate(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	client.Update(&setName)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to update new IP4 Network"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	if err != nil {
+		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.AddError(
+			"Failed to update created IP4 Network with name",
+			err.Error(),
+		)
+		return
 	}
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
-	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
+	clientLogout(&client, mutex, resp.Diagnostics)
 
-	return resourceIP4NetworkRead(ctx, d, meta)
+	// Write logs using the tflog package
+	// Documentation: https://terraform.io/plugin/log
+	tflog.Trace(ctx, "created a resource")
+
+	// Save data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceIP4NetworkRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
+func (r *IP4NetworkResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data *IP4NetworkResourceModel
 
-	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	resp, err := client.GetEntityById(id)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Address by Id"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	client := *clientLogin(r.client, mutex, resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	if *resp.Id == 0 {
-		d.SetId("")
+	id := data.ID.ValueInt64()
 
-		if err := client.Logout(); err != nil {
-			mutex.Unlock()
-			return diag.FromErr(err)
-		}
-
-		mutex.Unlock()
-		return nil
+	entity, err := client.GetEntityById(id)
+	if err != nil {
+		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.AddError(
+			"Failed to get IP4 Network by Id",
+			err.Error(),
+		)
+		return
 	}
 
-	d.Set("name", resp.Name)
-	d.Set("properties", resp.Properties)
-	d.Set("type", resp.Type)
+	if *entity.Id == 0 {
+		data.ID = types.Int64Null()
 
-	networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)
-	if err = gobam.LogoutClientIfError(client, err, "Error parsing IPv4 network properties"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.AddError(
+			"Failed to create IP4 Network",
+			err.Error(),
+		)
+
+		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+
+		return
 	}
 
-	d.Set("cidr", networkProperties.CIDR)
-	d.Set("allow_duplicate_host", networkProperties.AllowDuplicateHost)
-	d.Set("inherit_allow_duplicate_host", networkProperties.InheritAllowDuplicateHost)
-	d.Set("inherit_ping_before_assign", networkProperties.InheritPingBeforeAssign)
-	d.Set("ping_before_assign", networkProperties.PingBeforeAssign)
-	d.Set("gateway", networkProperties.Gateway)
-	d.Set("inherit_default_domains", networkProperties.InheritDefaultDomains)
-	d.Set("default_view", networkProperties.DefaultView)
-	d.Set("inherit_default_view", networkProperties.InheritDefaultView)
-	d.Set("inherit_dns_restrictions", networkProperties.InheritDNSRestrictions)
-	d.Set("custom_properties", networkProperties.CustomProperties)
+	data.Name = types.StringPointerValue(entity.Name)
+	data.Properties = types.StringPointerValue(entity.Properties)
+	data.Type = types.StringPointerValue(entity.Type)
 
-	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.CIDR, client)
-	if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	networkProperties, err := parseIP4NetworkProperties(*entity.Properties)
+	if err != nil {
+		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.AddError(
+			"Error parsing IPv4 network properties",
+			err.Error(),
+		)
+
+		return
 	}
 
-	d.Set("addresses_in_use", addressesInUse)
-	d.Set("addresses_free", addressesFree)
+	data.CIDR = networkProperties.cidr
+	data.AllowDuplicateHost = networkProperties.allowDuplicateHost
+	data.InheritAllowDuplicateHost = networkProperties.inheritAllowDuplicateHost
+	data.InheritPingBeforeAssign = networkProperties.inheritPingBeforeAssign
+	data.PingBeforeAssign = networkProperties.pingBeforeAssign
+	data.Gateway = networkProperties.gateway
+	data.InheritDefaultDomains = networkProperties.inheritDefaultDomains
+	data.DefaultView = networkProperties.defaultView
+	data.InheritDefaultView = networkProperties.inheritDefaultView
+	data.InheritDNSRestrictions = networkProperties.inheritDNSRestrictions
+	data.CustomProperties = networkProperties.customProperties
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
+	if err != nil {
+		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.AddError(
+			"Error calculating network usage",
+			err.Error(),
+		)
+		return
 	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
 
-	return nil
+	data.AddressesInUse = types.Int64Value(addressesInUse)
+	data.AddressesFree = types.Int64Value(addressesFree)
+
+	clientLogout(&client, mutex, resp.Diagnostics)
+
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceIP4NetworkUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
+func (r *IP4NetworkResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data *IP4NetworkResourceModel
 
-	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
 	}
-	name := d.Get("name").(string)
+
+	client := *clientLogin(r.client, mutex, resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	id := data.ID.ValueInt64()
+	name := data.Name.ValueString()
 	properties := ""
 	otype := "IP4Network"
 
@@ -274,63 +381,67 @@ func resourceIP4NetworkUpdate(ctx context.Context, d *schema.ResourceData, meta 
 		Type:       &otype,
 	}
 
-	client.Update(&update)
-	if err = gobam.LogoutClientIfError(client, err, "IP4 Network Update failed"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	err := client.Update(&update)
+	if err != nil {
+		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.AddError(
+			"IP4 Network Update failed",
+			err.Error(),
+		)
+		return
 	}
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
-	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
+	clientLogout(&client, mutex, resp.Diagnostics)
 
-	return resourceIP4NetworkRead(ctx, d, meta)
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceIP4NetworkDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
+func (r *IP4NetworkResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data *IP4NetworkResourceModel
 
-	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	resp, err := client.GetEntityById(id)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Network by Id"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	client := *clientLogin(r.client, mutex, resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	if *resp.Id == 0 {
-		if err := client.Logout(); err != nil {
-			mutex.Unlock()
-			return diag.FromErr(err)
-		}
+	id := data.ID.ValueInt64()
 
-		mutex.Unlock()
-		return nil
+	entity, err := client.GetEntityById(id)
+	if err != nil {
+		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.AddError(
+			"Failed to get IP4 Network by Id",
+			err.Error(),
+		)
+		return
+	}
+
+	if *entity.Id == 0 {
+		clientLogout(&client, mutex, resp.Diagnostics)
+		return
 	}
 
 	err = client.Delete(id)
-	if err = gobam.LogoutClientIfError(client, err, "Delete failed"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	if err != nil {
+		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.AddError(
+			"Delete failed",
+			err.Error(),
+		)
+		return
 	}
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
-	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
+	clientLogout(&client, mutex, resp.Diagnostics)
+}
 
-	return nil
+func (r *IP4NetworkResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
