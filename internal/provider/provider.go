@@ -209,7 +209,10 @@ func (p *blueCatProvider) Configure(ctx context.Context, req provider.ConfigureR
 
 func (p *blueCatProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		// NewExampleResource,
+		NewHostRecordResource,
+		NewIP4AddressResource,
+		NewIP4NetworkResource,
+		NewIP4AvailableNetworkResource,
 	}
 }
 
