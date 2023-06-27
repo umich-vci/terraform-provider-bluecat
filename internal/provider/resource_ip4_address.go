@@ -50,7 +50,7 @@ type IP4AddressResourceModel struct {
 }
 
 func (r *IP4AddressResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_example"
+	resp.TypeName = req.ProviderTypeName + "_ip4_address"
 }
 
 func (r *IP4AddressResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {

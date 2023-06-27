@@ -24,20 +24,20 @@ import (
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
-var _ resource.Resource = &ExampleResource{}
-var _ resource.ResourceWithImportState = &ExampleResource{}
+var _ resource.Resource = &IP4AvailableNetworkResource{}
+var _ resource.ResourceWithImportState = &IP4AvailableNetworkResource{}
 
-func NewExampleResource() resource.Resource {
-	return &ExampleResource{}
+func NewIP4AvailableNetworkResource() resource.Resource {
+	return &IP4AvailableNetworkResource{}
 }
 
-// ExampleResource defines the resource implementation.
-type ExampleResource struct {
+// IP4AvailableNetworkResource defines the resource implementation.
+type IP4AvailableNetworkResource struct {
 	client *loginClient
 }
 
-// ExampleResourceModel describes the resource data model.
-type ExampleResourceModel struct {
+// IP4AvailableNetworkResourceModel describes the resource data model.
+type IP4AvailableNetworkResourceModel struct {
 	ID            types.String `tfsdk:"id"`
 	NetworkIDList types.List   `tfsdk:"network_id_list"`
 	Keepers       types.Map    `tfsdk:"keepers"`
@@ -46,11 +46,11 @@ type ExampleResourceModel struct {
 	NetworkID     types.Int64  `tfsdk:"network_id"`
 }
 
-func (r *ExampleResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *IP4AvailableNetworkResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_ip4_available_network"
 }
 
-func (r *ExampleResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *IP4AvailableNetworkResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		MarkdownDescription: "Resource to select an IPv4 network from a list of networks based on availability of IP addresses.",
@@ -102,7 +102,7 @@ func (r *ExampleResource) Schema(ctx context.Context, req resource.SchemaRequest
 	}
 }
 
-func (r *ExampleResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *IP4AvailableNetworkResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	// Prevent panic if the provider has not been configured.
 	if req.ProviderData == nil {
 		return
@@ -122,8 +122,8 @@ func (r *ExampleResource) Configure(ctx context.Context, req resource.ConfigureR
 	r.client = client
 }
 
-func (r *ExampleResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data *ExampleResourceModel
+func (r *IP4AvailableNetworkResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data *IP4AvailableNetworkResourceModel
 
 	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -288,8 +288,8 @@ func (r *ExampleResource) Create(ctx context.Context, req resource.CreateRequest
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *ExampleResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data *ExampleResourceModel
+func (r *IP4AvailableNetworkResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data *IP4AvailableNetworkResourceModel
 
 	// Read Terraform prior state data into the model
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
@@ -310,8 +310,8 @@ func (r *ExampleResource) Read(ctx context.Context, req resource.ReadRequest, re
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *ExampleResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data *ExampleResourceModel
+func (r *IP4AvailableNetworkResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data *IP4AvailableNetworkResourceModel
 
 	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -332,8 +332,8 @@ func (r *ExampleResource) Update(ctx context.Context, req resource.UpdateRequest
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *ExampleResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data *ExampleResourceModel
+func (r *IP4AvailableNetworkResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data *IP4AvailableNetworkResourceModel
 
 	// Read Terraform prior state data into the model
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
@@ -346,7 +346,7 @@ func (r *ExampleResource) Delete(ctx context.Context, req resource.DeleteRequest
 	// return nil
 }
 
-func (r *ExampleResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *IP4AvailableNetworkResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 

@@ -62,7 +62,7 @@ type IP4NetworkResourceModel struct {
 }
 
 func (r *IP4NetworkResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_example"
+	resp.TypeName = req.ProviderTypeName + "_ip4_network"
 }
 
 func (r *IP4NetworkResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {

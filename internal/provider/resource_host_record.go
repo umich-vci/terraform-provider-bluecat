@@ -54,7 +54,7 @@ type HostRecordResourceModel struct {
 }
 
 func (r *HostRecordResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_example"
+	resp.TypeName = req.ProviderTypeName + "_host_record"
 }
 
 func (r *HostRecordResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {

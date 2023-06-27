@@ -62,7 +62,7 @@ type IP4NBRDataSourceModel struct {
 }
 
 func (d *IP4NBRDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_example"
+	resp.TypeName = req.ProviderTypeName + "_ip4_network-block-range"
 }
 
 func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
