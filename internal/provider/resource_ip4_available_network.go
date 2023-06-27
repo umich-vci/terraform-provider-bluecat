@@ -1,80 +1,167 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package provider
 
 import (
 	"context"
+	"fmt"
 	"hash/crc64"
-	"log"
 	"math/rand"
 	"time"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/umich-vci/gobam"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
-func resourceIP4AvailableNetwork() *schema.Resource {
-	return &schema.Resource{
-		Description: "Resource to select an IPv4 network from a list of networks based on availability of IP addresses.",
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &ExampleResource{}
+var _ resource.ResourceWithImportState = &ExampleResource{}
 
-		CreateContext: resourceIP4AvailableNetworkCreate,
-		ReadContext:   schema.NoopContext,
-		DeleteContext: resourceIP4AvailableNetworkDelete,
+func NewExampleResource() resource.Resource {
+	return &ExampleResource{}
+}
 
-		Schema: map[string]*schema.Schema{
-			"network_id_list": {
-				Description: "A list of Network IDs to search for a free IP address. By default, the address with the most free addresses will be returned. See the `random` argument for another selection method. The resource will be recreated if the network_id_list is changed. You may want to use a `lifecycle` customization to ignore changes to the list after resource creation so that a new network is not selected if the list is changed.",
-				Type:        schema.TypeList,
-				Required:    true,
-				ForceNew:    true,
-				Elem: &schema.Schema{
-					Type: schema.TypeInt,
+// ExampleResource defines the resource implementation.
+type ExampleResource struct {
+	client *loginClient
+}
+
+// ExampleResourceModel describes the resource data model.
+type ExampleResourceModel struct {
+	ID            types.String `tfsdk:"id"`
+	NetworkIDList types.List   `tfsdk:"network_id_list"`
+	Keepers       types.Map    `tfsdk:"keepers"`
+	Random        types.Bool   `tfsdk:"random"`
+	Seed          types.String `tfsdk:"seed"`
+	NetworkID     types.Int64  `tfsdk:"network_id"`
+}
+
+func (r *ExampleResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_ip4_available_network"
+}
+
+func (r *ExampleResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		// This description is used by the documentation generator and the language server.
+		MarkdownDescription: "Resource to select an IPv4 network from a list of networks based on availability of IP addresses.",
+
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "Example identifier",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"keepers": {
-				Description: "An arbitrary map of values. If this argument is changed, then the resource will be recreated.",
-				Type:        schema.TypeMap,
-				Optional:    true,
-				ForceNew:    true,
-				Elem: &schema.Schema{
-					Type: schema.TypeString,
+			"network_id_list": schema.ListAttribute{
+				MarkdownDescription: "A list of Network IDs to search for a free IP address. By default, the address with the most free addresses will be returned. See the `random` argument for another selection method. The resource will be recreated if the network_id_list is changed. You may want to use a `lifecycle` customization to ignore changes to the list after resource creation so that a new network is not selected if the list is changed.",
+				Required:            true,
+				ElementType:         types.Int64Type,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.RequiresReplace(),
 				},
 			},
-			"random": {
-				Description: "By default, the network with the most free IP addresses is returned. By setting this to `true` a random network from the list will be returned instead. The network will be validated to have at least 1 free IP address.",
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     false,
-				ForceNew:    true,
+			"keepers": schema.MapAttribute{
+				MarkdownDescription: "An arbitrary map of values. If this argument is changed, then the resource will be recreated.",
+				Optional:            true,
+				ElementType:         types.StringType,
+				PlanModifiers: []planmodifier.Map{
+					mapplanmodifier.RequiresReplace(),
+				},
 			},
-			"seed": {
-				Description: "A seed for the `random` argument's generator. Can be used to try to get more predictable results from the random selection. The results will not be fixed however.",
-				Type:        schema.TypeString,
-				Optional:    true,
-				ForceNew:    true,
+			"random": schema.BoolAttribute{
+				MarkdownDescription: "By default, the network with the most free IP addresses is returned. By setting this to `true` a random network from the list will be returned instead. The network will be validated to have at least 1 free IP address.",
+				Optional:            true,
+				Default:             booldefault.StaticBool(false),
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
 			},
-			"network_id": {
-				Description: "The network ID of the network selected by the resource.",
-				Type:        schema.TypeInt,
-				Computed:    true,
+			"seed": schema.StringAttribute{
+				MarkdownDescription: "A seed for the `random` argument's generator. Can be used to try to get more predictable results from the random selection. The results will not be fixed however.",
+				Optional:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"network_id": schema.Int64Attribute{
+				MarkdownDescription: "The network ID of the network selected by the resource.",
+				Computed:            true,
 			},
 		},
 	}
 }
-func resourceIP4AvailableNetworkCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
 
-	result := -1
+func (r *ExampleResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
+	}
 
-	networkIDList := d.Get("network_id_list").([]interface{})
-	seed := d.Get("seed").(string)
-	random := d.Get("random").(bool)
+	client, ok := req.ProviderData.(*loginClient)
+
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	r.client = client
+}
+
+func (r *ExampleResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data *ExampleResourceModel
+
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	client := *clientLogin(r.client, mutex, resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	result := int64(-1)
+
+	networkIDList := []int64{}
+	diag := data.NetworkIDList.ElementsAs(ctx, networkIDList, false)
+	if diag.HasError() {
+		resp.Diagnostics.AddError(
+			"Parsing network ids failed",
+			"",
+		)
+		clientLogout(&client, mutex, resp.Diagnostics)
+
+		return
+	}
+
+	seed := data.Seed.ValueString()
+	random := data.Random.ValueBool()
 
 	if len(networkIDList) == 0 {
-		err := gobam.LogoutClientWithError(client, "network_id_list cannot be empty")
-		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"network_id_list cannot be empty",
+			"",
+		)
+		clientLogout(&client, mutex, resp.Diagnostics)
+
+		return
 	}
 
 	if random {
@@ -86,28 +173,43 @@ func resourceIP4AvailableNetworkCreate(ctx context.Context, d *schema.ResourceDa
 			perm := rand.Perm(len(networkIDList))
 
 			for _, i := range perm {
-				id := int64(networkIDList[i].(int))
+				id := networkIDList[i]
 
-				resp, err := client.GetEntityById(id)
-				if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Network by Id"); err != nil {
-					mutex.Unlock()
-					return diag.FromErr(err)
+				entity, err := client.GetEntityById(id)
+				if err != nil {
+					resp.Diagnostics.AddError(
+						"Failed to get IP4 Network by Id",
+						err.Error(),
+					)
+					clientLogout(&client, mutex, resp.Diagnostics)
+
+					return
 				}
 
-				networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)
-				if err = gobam.LogoutClientIfError(client, err, "Error parsing IP4 network properties"); err != nil {
-					mutex.Unlock()
-					return diag.FromErr(err)
+				networkProperties, err := parseIP4NetworkProperties(*entity.Properties)
+				if err != nil {
+					resp.Diagnostics.AddError(
+						"Error parsing IP4 network properties",
+						err.Error(),
+					)
+					clientLogout(&client, mutex, resp.Diagnostics)
+
+					return
 				}
 
-				_, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.CIDR, client)
-				if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
-					mutex.Unlock()
-					return diag.FromErr(err)
+				_, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
+				if err != nil {
+					resp.Diagnostics.AddError(
+						"Error calculating network usage",
+						err.Error(),
+					)
+					clientLogout(&client, mutex, resp.Diagnostics)
+
+					return
 				}
 
 				if addressesFree > 0 {
-					result = networkIDList[i].(int)
+					result = networkIDList[i]
 					break Batches
 				}
 			}
@@ -115,26 +217,38 @@ func resourceIP4AvailableNetworkCreate(ctx context.Context, d *schema.ResourceDa
 
 	} else {
 
-		freeAddressMap := make(map[int64]int)
+		freeAddressMap := make(map[int64]int64)
 		for i := range networkIDList {
-			id := int64(networkIDList[i].(int))
+			id := networkIDList[i]
 
-			resp, err := client.GetEntityById(id)
-			if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Network by Id"); err != nil {
-				mutex.Unlock()
-				return diag.FromErr(err)
+			entity, err := client.GetEntityById(id)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Failed to get IP4 Network by Id",
+					err.Error(),
+				)
+				clientLogout(&client, mutex, resp.Diagnostics)
+				return
 			}
 
-			networkProperties, err := gobam.ParseIP4NetworkProperties(*resp.Properties)
-			if err = gobam.LogoutClientIfError(client, err, "Error parsing IP4 network properties"); err != nil {
-				mutex.Unlock()
-				return diag.FromErr(err)
+			networkProperties, err := parseIP4NetworkProperties(*entity.Properties)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Error parsing IP4 network properties",
+					err.Error(),
+				)
+				clientLogout(&client, mutex, resp.Diagnostics)
+				return
 			}
 
-			_, addressesFree, err := getIP4NetworkAddressUsage(*resp.Id, networkProperties.CIDR, client)
-			if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
-				mutex.Unlock()
-				return diag.FromErr(err)
+			_, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Error calculating network usage",
+					err.Error(),
+				)
+				clientLogout(&client, mutex, resp.Diagnostics)
+				return
 			}
 
 			if addressesFree > 0 {
@@ -143,33 +257,97 @@ func resourceIP4AvailableNetworkCreate(ctx context.Context, d *schema.ResourceDa
 
 		}
 
-		freeCount := 0
+		freeCount := int64(0)
 		for k, v := range freeAddressMap {
 			if v > freeCount {
 				freeCount = v
-				result = int(k)
+				result = int64(k)
 			}
 		}
 	}
 
 	if result == -1 {
-		err := gobam.LogoutClientWithError(client, "No networks had a free address")
-		mutex.Unlock()
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(
+			"No networks had a free address",
+			"",
+		)
+		clientLogout(&client, mutex, resp.Diagnostics)
+		return
 	}
 
-	d.SetId("-")
-	d.Set("network_id", result)
+	data.ID = types.StringValue("-")
+	data.NetworkID = types.Int64Value(result)
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	clientLogout(&client, mutex, resp.Diagnostics)
+
+	// Write logs using the tflog package
+	// Documentation: https://terraform.io/plugin/log
+	tflog.Trace(ctx, "created a resource")
+
+	// Save data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *ExampleResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data *ExampleResourceModel
+
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
 	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
 
-	return nil
+	// If applicable, this is a great opportunity to initialize any necessary
+	// provider client data and make a call using it.
+	// httpResp, err := r.client.Do(httpReq)
+	// if err != nil {
+	//     resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read example, got error: %s", err))
+	//     return
+	// }
+
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *ExampleResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data *ExampleResourceModel
+
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// If applicable, this is a great opportunity to initialize any necessary
+	// provider client data and make a call using it.
+	// httpResp, err := r.client.Do(httpReq)
+	// if err != nil {
+	//     resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update example, got error: %s", err))
+	//     return
+	// }
+
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *ExampleResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data *ExampleResourceModel
+
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// d.SetId("")
+	// return nil
+}
+
+func (r *ExampleResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 // NewRand returns a seeded random number generator, using a seed derived
@@ -187,9 +365,4 @@ func NewRand(seed string) *rand.Rand {
 
 	randSource := rand.NewSource(seedInt)
 	return rand.New(randSource)
-}
-
-func resourceIP4AvailableNetworkDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	d.SetId("")
-	return nil
 }
