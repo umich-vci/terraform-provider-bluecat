@@ -4,8 +4,6 @@
 package provider
 
 import (
-	"fmt"
-	"strconv"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -20,17 +18,7 @@ func TestAccEntityDataSource(t *testing.T) {
 			{
 				Config: testAccEntityDataSourceConfig,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrWith("data.bluecat_entity.config", "id", func(value string) error {
-						valueInt, err := strconv.Atoi(value)
-						if err != nil {
-							return err
-						}
-
-						if valueInt <= 0 {
-							return fmt.Errorf("should be a value greater than 0")
-						}
-						return nil
-					}),
+					resource.TestCheckResourceAttrWith("data.bluecat_entity.config", "id", validateObjectID),
 				),
 			},
 		},
