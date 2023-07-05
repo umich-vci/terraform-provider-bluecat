@@ -90,8 +90,8 @@ func (p *blueCatProvider) Configure(ctx context.Context, req provider.ConfigureR
 	if config.BlueCatEndpoint.IsUnknown() {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("bluecat_endpoint"),
-			"Unknown BlueCat API Endpoint",
-			"The provider cannot create the HashiCups API client as there is an unknown configuration value for the HashiCups API host. "+
+			"Unknown BlueCat SOAP Endpoint",
+			"The provider cannot create the BlueCat SOAP client as there is an unknown configuration value for the BlueCat SOAP host. "+
 				"Either target apply the source of the value first, set the value statically in the configuration, or use the BLUECAT_ENDPOINT environment variable.",
 		)
 	}
@@ -100,7 +100,7 @@ func (p *blueCatProvider) Configure(ctx context.Context, req provider.ConfigureR
 		resp.Diagnostics.AddAttributeError(
 			path.Root("username"),
 			"Unknown BlueCat API Username",
-			"The provider cannot create the HashiCups API client as there is an unknown configuration value for the HashiCups API username. "+
+			"The provider cannot create the BlueCat SOAP client as there is an unknown configuration value for the BlueCat SOAP username. "+
 				"Either target apply the source of the value first, set the value statically in the configuration, or use the BLUECAT_USERNAME environment variable.",
 		)
 	}
@@ -109,7 +109,7 @@ func (p *blueCatProvider) Configure(ctx context.Context, req provider.ConfigureR
 		resp.Diagnostics.AddAttributeError(
 			path.Root("password"),
 			"Unknown BlueCat API Password",
-			"The provider cannot create the HashiCups API client as there is an unknown configuration value for the HashiCups API password. "+
+			"The provider cannot create the BlueCat SOAP client as there is an unknown configuration value for the BlueCat SOAP password. "+
 				"Either target apply the source of the value first, set the value statically in the configuration, or use the BLUECAT_PASSWORD environment variable.",
 		)
 	}
@@ -118,7 +118,7 @@ func (p *blueCatProvider) Configure(ctx context.Context, req provider.ConfigureR
 		resp.Diagnostics.AddAttributeError(
 			path.Root("ssl_verify"),
 			"Unknown BlueCat API",
-			"The provider cannot create the HashiCups API client as there is an unknown configuration value for the HashiCups API password. "+
+			"The provider cannot create the BlueCat SOAP client as there is an unknown configuration value for the BlueCat SOAP password. "+
 				"Either target apply the source of the value first, set the value statically in the configuration, or use the BLUECAT_PASSWORD environment variable.",
 		)
 	}
@@ -157,8 +157,8 @@ func (p *blueCatProvider) Configure(ctx context.Context, req provider.ConfigureR
 	if endpoint == "" {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("bluecat_endpoint"),
-			"Missing BlueCat API Endpoint",
-			"The provider cannot create the HashiCups API client as there is a missing or empty value for the HashiCups API host. "+
+			"Missing BlueCat SOAP Endpoint",
+			"The provider cannot create the BlueCat SOAP client as there is a missing or empty value for the BlueCat SOAP host. "+
 				"Set the host value in the configuration or use the BLUECAT_ENDPOINT environment variable. "+
 				"If either is already set, ensure the value is not empty.",
 		)
@@ -167,8 +167,8 @@ func (p *blueCatProvider) Configure(ctx context.Context, req provider.ConfigureR
 	if username == "" {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("username"),
-			"Missing BlueCat API Username",
-			"The provider cannot create the HashiCups API client as there is a missing or empty value for the HashiCups API username. "+
+			"Missing BlueCat SOAP Username",
+			"The provider cannot create the BlueCat SOAP client as there is a missing or empty value for the BlueCat SOAP username. "+
 				"Set the username value in the configuration or use the BLUECAT_USERNAME environment variable. "+
 				"If either is already set, ensure the value is not empty.",
 		)
@@ -177,8 +177,8 @@ func (p *blueCatProvider) Configure(ctx context.Context, req provider.ConfigureR
 	if password == "" {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("password"),
-			"Missing BlueCat API Password",
-			"The provider cannot create the HashiCups API client as there is a missing or empty value for the HashiCups API password. "+
+			"Missing BlueCat SOAP Password",
+			"The provider cannot create the BlueCat SOAP client as there is a missing or empty value for the BlueCat SOAP password. "+
 				"Set the password value in the configuration or use the BLUECAT_PASSWORD environment variable. "+
 				"If either is already set, ensure the value is not empty.",
 		)
