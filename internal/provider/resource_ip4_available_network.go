@@ -187,14 +187,10 @@ func (r *IP4AvailableNetworkResource) Create(ctx context.Context, req resource.C
 					return
 				}
 
-				networkProperties, err := parseIP4NetworkProperties(*entity.Properties)
-				if err != nil {
-					resp.Diagnostics.AddError(
-						"Error parsing IP4 network properties",
-						err.Error(),
-					)
+				networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
+				if diag.HasError() {
 					clientLogout(&client, mutex, resp.Diagnostics)
-
+					resp.Diagnostics.Append(diag...)
 					return
 				}
 
@@ -232,13 +228,10 @@ func (r *IP4AvailableNetworkResource) Create(ctx context.Context, req resource.C
 				return
 			}
 
-			networkProperties, err := parseIP4NetworkProperties(*entity.Properties)
-			if err != nil {
-				resp.Diagnostics.AddError(
-					"Error parsing IP4 network properties",
-					err.Error(),
-				)
+			networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
+			if diag.HasError() {
 				clientLogout(&client, mutex, resp.Diagnostics)
+				resp.Diagnostics.Append(diag...)
 				return
 			}
 

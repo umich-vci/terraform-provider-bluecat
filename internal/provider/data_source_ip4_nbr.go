@@ -15,8 +15,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/umich-vci/gobam"
 )
@@ -230,13 +232,11 @@ func (d *IP4NBRDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	data.Properties = types.StringPointerValue(ipRange.Properties)
 	data.Type = types.StringPointerValue(ipRange.Type)
 
-	networkProperties, err := parseIP4NetworkProperties(*ipRange.Properties)
-	if err = gobam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Error parsing host record properties",
-			err.Error(),
-		)
+	tflog.Info(ctx, fmt.Sprintf("parsing properties: %s", *ipRange.Properties))
+	networkProperties, diag := parseIP4NetworkProperties(*ipRange.Properties)
+	if diag.HasError() {
+		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 
@@ -310,8 +310,13 @@ type ip4NetworkProperties struct {
 	customProperties          types.Map
 }
 
-func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, error) {
-	var networkProperties ip4NetworkProperties
+func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, diag.Diagnostics) {
+	networkProperties := ip4NetworkProperties{
+		defaultDomains:   basetypes.NewSetNull(types.Int64Type),
+		dnsRestrictions:  basetypes.NewSetNull(types.Int64Type),
+		customProperties: basetypes.NewMapNull(types.StringType),
+	}
+	var diag diag.Diagnostics
 	cpMap := make(map[string]attr.Value)
 
 	props := strings.Split(properties, "|")
@@ -328,7 +333,8 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, error) 
 			case "template":
 				t, err := strconv.ParseInt(val, 10, 64)
 				if err != nil {
-					return networkProperties, fmt.Errorf("error parsing addressIds to int64")
+					diag.AddError("error parsing template to int64", err.Error())
+					break
 				}
 				networkProperties.template = types.Int64Value(t)
 			case "gateway":
@@ -337,17 +343,24 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, error) 
 				defaultDomains := strings.Split(val, ",")
 				defaultDomainsList := []attr.Value{}
 				for i := range defaultDomains {
-					defaultDomainsList = append(defaultDomainsList, types.StringValue(defaultDomains[i]))
+					dID, err := strconv.ParseInt(defaultDomains[i], 10, 64)
+					if err != nil {
+						diag.AddError("error parsing defaultDomains to int64", err.Error())
+						break
+					}
+					defaultDomainsList = append(defaultDomainsList, types.Int64Value(dID))
 				}
-				defaultDomainsSet, diag := types.SetValue(types.StringType, defaultDomainsList)
-				if diag.HasError() {
-					return networkProperties, fmt.Errorf("error creating defaultDomains set")
+				defaultDomainsSet, d := basetypes.NewSetValue(types.Int64Type, defaultDomainsList)
+				if d.HasError() {
+					diag.Append(d...)
+					break
 				}
 				networkProperties.defaultDomains = defaultDomainsSet
 			case "defaultView":
 				dv, err := strconv.ParseInt(val, 10, 64)
 				if err != nil {
-					return networkProperties, fmt.Errorf("error parsing defaultView to int64")
+					diag.AddError("error parsing defaultView to int64", err.Error())
+					break
 				}
 				networkProperties.defaultView = types.Int64Value(dv)
 			case "dnsRestrictions":
@@ -356,12 +369,14 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, error) 
 				for i := range dnsRestrictions {
 					dID, err := strconv.ParseInt(dnsRestrictions[i], 10, 64)
 					if err != nil {
-						return networkProperties, fmt.Errorf("error parsing dnsRestrictions to int64")
+						diag.AddError("error parsing dnsRestrictions to int64", err.Error())
+						break
 					}
 					didList = append(didList, types.Int64Value(dID))
-					didSet, diag := types.SetValue(types.StringType, didList)
+					var didSet basetypes.SetValue
+					didSet, diag = basetypes.NewSetValue(types.Int64Type, didList)
 					if diag.HasError() {
-						return networkProperties, fmt.Errorf("error creating dnsRestrictions set")
+						break
 					}
 					networkProperties.dnsRestrictions = didSet
 				}
@@ -372,31 +387,36 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, error) 
 			case "inheritAllowDuplicateHost":
 				b, err := strconv.ParseBool(val)
 				if err != nil {
-					return networkProperties, fmt.Errorf("error parsing inheritAllowDuplicateHost to bool")
+					diag.AddError("error parsing inheritAllowDuplicateHost to bool", err.Error())
+					break
 				}
 				networkProperties.inheritAllowDuplicateHost = types.BoolValue(b)
 			case "inheritPingBeforeAssign":
 				b, err := strconv.ParseBool(val)
 				if err != nil {
-					return networkProperties, fmt.Errorf("error parsing inheritPingBeforeAssign to bool")
+					diag.AddError("error parsing inheritPingBeforeAssign to bool", err.Error())
+					break
 				}
 				networkProperties.inheritAllowDuplicateHost = types.BoolValue(b)
 			case "inheritDNSRestrictions":
 				b, err := strconv.ParseBool(val)
 				if err != nil {
-					return networkProperties, fmt.Errorf("error parsing inheritDNSRestrictions to bool")
+					diag.AddError("error parsing inheritDNSRestrictions to bool", err.Error())
+					break
 				}
 				networkProperties.inheritDNSRestrictions = types.BoolValue(b)
 			case "inheritDefaultDomains":
 				b, err := strconv.ParseBool(val)
 				if err != nil {
-					return networkProperties, fmt.Errorf("error parsing inheritDefaultDomains to bool")
+					diag.AddError("error parsing inheritDefaultDomains to bool", err.Error())
+					break
 				}
 				networkProperties.inheritDefaultDomains = types.BoolValue(b)
 			case "inheritDefaultView":
 				b, err := strconv.ParseBool(val)
 				if err != nil {
-					return networkProperties, fmt.Errorf("error parsing inheritDefaultView to bool")
+					diag.AddError("error parsing inheritDefaultView to bool", err.Error())
+					break
 				}
 				networkProperties.inheritDefaultView = types.BoolValue(b)
 			case "locationCode":
@@ -404,7 +424,8 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, error) 
 			case "locationInherited":
 				b, err := strconv.ParseBool(val)
 				if err != nil {
-					return networkProperties, fmt.Errorf("error parsing locationInherited to bool")
+					diag.AddError("error parsing locationInherited to bool", err.Error())
+					break
 				}
 				networkProperties.locationInherited = types.BoolValue(b)
 			default:
@@ -413,12 +434,13 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, error) 
 		}
 	}
 
-	customProperties, diag := types.MapValue(types.StringType, cpMap)
-	if diag.HasError() {
-		return networkProperties, fmt.Errorf("error creating custom properties map")
+	var customProperties basetypes.MapValue
+	customProperties, d := basetypes.NewMapValue(types.StringType, cpMap)
+	if d.HasError() {
+		diag.Append(d...)
 	}
 	networkProperties.customProperties = customProperties
-	return networkProperties, nil
+	return networkProperties, diag
 }
 
 func getIP4NetworkAddressUsage(id int64, cidr string, client gobam.ProteusAPI) (int64, int64, error) {

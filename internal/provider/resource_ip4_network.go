@@ -314,14 +314,10 @@ func (r *IP4NetworkResource) Read(ctx context.Context, req resource.ReadRequest,
 	data.Properties = types.StringPointerValue(entity.Properties)
 	data.Type = types.StringPointerValue(entity.Type)
 
-	networkProperties, err := parseIP4NetworkProperties(*entity.Properties)
-	if err != nil {
+	networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
+	if diag.HasError() {
 		clientLogout(&client, mutex, resp.Diagnostics)
-		resp.Diagnostics.AddError(
-			"Error parsing IPv4 network properties",
-			err.Error(),
-		)
-
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 

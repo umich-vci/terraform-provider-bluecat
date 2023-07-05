@@ -250,13 +250,10 @@ func (d *IP4NetworkDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.Properties = types.StringPointerValue(entity.Properties)
 	data.Type = types.StringPointerValue(entity.Type)
 
-	networkProperties, err := parseIP4NetworkProperties(*entity.Properties)
-	if err = gobam.LogoutClientIfError(client, err, "Error parsing network properties"); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed to get IP4 Network via Entity ID",
-			err.Error(),
-		)
+	networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
+	if diag.HasError() {
+		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 
