@@ -267,14 +267,9 @@ func (r *HostRecordResource) Read(ctx context.Context, req resource.ReadRequest,
 	data.Properties = types.StringPointerValue(entity.Properties)
 	data.Type = types.StringPointerValue(entity.Type)
 
-	hostRecordProperties, err := parseHostRecordProperties(*entity.Properties)
-	if err = gobam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
-		mutex.Unlock()
-
-		resp.Diagnostics.AddError(
-			"Error parsing the host record properties",
-			err.Error(),
-		)
+	hostRecordProperties := parseHostRecordProperties(*entity.Properties, resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		clientLogout(&client, mutex, resp.Diagnostics)
 		return
 	}
 

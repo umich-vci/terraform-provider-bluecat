@@ -13,9 +13,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"github.com/umich-vci/gobam"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -147,12 +148,12 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 
 	start := 0
 	count := 10
-	absoluteName := data.AbsoluteName.String()
-	options := "hint=^" + absoluteName + "$|"
+	absoluteName := data.AbsoluteName.ValueString()
+	options := fmt.Sprintf("hint=^%s$|retrieveFields=true", absoluteName)
 
 	hostRecords, err := client.GetHostRecordsByHint(start, count, options)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get Host Records by hint"); err != nil {
-		mutex.Unlock()
+	if err != nil {
+		clientLogout(&client, mutex, resp.Diagnostics)
 		resp.Diagnostics.AddError(
 			"Failed to get Host Records by hint",
 			fmt.Sprintf("Failed to get Host Records by hint: %s", err.Error()),
@@ -160,7 +161,18 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	log.Printf("[INFO] GetHostRecordsByHint returned %s results", strconv.Itoa(len(hostRecords.Item)))
+	resultCount := len(hostRecords.Item)
+
+	if resultCount == 0 {
+		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.AddError(
+			"No host records returned by GetHostRecordsByHint",
+			fmt.Sprintf("No host records returned with options: %s", options),
+		)
+		return
+	}
+
+	tflog.Info(ctx, fmt.Sprintf("GetHostRecordsByHint returned %s results", strconv.Itoa(resultCount)))
 
 	matches := 0
 	matchLocation := -1
@@ -180,15 +192,12 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	}
 
 	if matches == 0 || matches > 1 {
-		err := fmt.Errorf("no exact host record match found for: %s", absoluteName)
-		if err = gobam.LogoutClientIfError(client, err, "No exact host record match found for hint"); err != nil {
-			mutex.Unlock()
-			resp.Diagnostics.AddError(
-				"No exact host record match found for hint",
-				fmt.Sprintf("No exact host record match found for hint: %s", err.Error()),
-			)
-			return
-		}
+		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.AddError(
+			"No exact host record match found for hint",
+			fmt.Sprintf("No exact host record match found for hint: %s. Number of matches was: %d", absoluteName, matches),
+		)
+		return
 	}
 
 	data.ID = types.Int64Value(*hostRecords.Item[matchLocation].Id)
@@ -196,15 +205,10 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.Properties = types.StringValue(*hostRecords.Item[matchLocation].Properties)
 	data.Type = types.StringValue(*hostRecords.Item[matchLocation].Type)
 
-	hostRecordProperties, err := parseHostRecordProperties(*hostRecords.Item[matchLocation].Properties)
-	if err != nil {
-		gobam.LogoutClientWithError(client, "Error parsing host record properties")
-		mutex.Unlock()
-
-		resp.Diagnostics.AddError(
-			"Error parsing the host record properties",
-			err.Error(),
-		)
+	hostRecordProperties := parseHostRecordProperties(*hostRecords.Item[matchLocation].Properties, resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		clientLogout(&client, mutex, resp.Diagnostics)
+		return
 	}
 
 	data.AbsoluteName = hostRecordProperties.absoluteName
@@ -216,16 +220,8 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.CustomProperties = hostRecordProperties.customProperties
 	data.TTL = hostRecordProperties.ttl
 
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed logout client",
-			fmt.Sprintf("Unexpected error logging out client: %s", err.Error()),
-		)
-		return
-	}
+	clientLogout(&client, mutex, resp.Diagnostics)
 	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
@@ -246,7 +242,7 @@ type hostRecordProperties struct {
 	customProperties types.Map
 }
 
-func parseHostRecordProperties(properties string) (hostRecordProperties, error) {
+func parseHostRecordProperties(properties string, diag diag.Diagnostics) hostRecordProperties {
 	var hrProperties hostRecordProperties
 
 	cpMap := make(map[string]attr.Value)
@@ -266,7 +262,8 @@ func parseHostRecordProperties(properties string) (hostRecordProperties, error) 
 			case "parentId":
 				pID, err := strconv.ParseInt(val, 10, 64)
 				if err != nil {
-					return hrProperties, fmt.Errorf("error parsing parentId to int64")
+					diag.AddError("error parsing parentId to int64", fmt.Sprintf("value of parentId was %s", val))
+					return hrProperties
 				}
 				hrProperties.parentID = types.Int64Value(pID)
 			case "parentType":
@@ -274,7 +271,8 @@ func parseHostRecordProperties(properties string) (hostRecordProperties, error) 
 			case "reverseRecord":
 				b, err := strconv.ParseBool(val)
 				if err != nil {
-					return hrProperties, fmt.Errorf("error parsing reverseRecord to bool")
+					diag.AddError("error parsing reverseRecord to bool", fmt.Sprintf("value of reverseRecord was %s", val))
+					return hrProperties
 				}
 				hrProperties.reverseRecord = types.BoolValue(b)
 			case "addresses":
@@ -283,9 +281,10 @@ func parseHostRecordProperties(properties string) (hostRecordProperties, error) 
 				for i := range addresses {
 					addressList = append(addressList, types.StringValue(addresses[i]))
 				}
-				addressSet, diag := types.SetValue(types.StringType, addressList)
+				var addressSet basetypes.SetValue
+				addressSet, diag = types.SetValue(types.StringType, addressList)
 				if diag.HasError() {
-					return hrProperties, fmt.Errorf("error creating address set")
+					return hrProperties
 				}
 				hrProperties.addresses = addressSet
 			case "addressIds":
@@ -294,19 +293,22 @@ func parseHostRecordProperties(properties string) (hostRecordProperties, error) 
 				for i := range addressIDs {
 					aID, err := strconv.ParseInt(addressIDs[i], 10, 64)
 					if err != nil {
-						return hrProperties, fmt.Errorf("error parsing addressIds to int64")
+						diag.AddError("error parsing addressIds to int64", fmt.Sprintf("value in addressIds was %s", val))
+						return hrProperties
 					}
 					aidList = append(aidList, types.Int64Value(aID))
 				}
-				aidSet, diag := types.SetValue(types.StringType, aidList)
+				var aidSet basetypes.SetValue
+				aidSet, diag = basetypes.NewSetValue(types.Int64Type, aidList)
 				if diag.HasError() {
-					return hrProperties, fmt.Errorf("error creating address id set")
+					return hrProperties
 				}
 				hrProperties.addressIDs = aidSet
 			case "ttl":
 				ttlval, err := strconv.ParseInt(val, 10, 64)
 				if err != nil {
-					return hrProperties, fmt.Errorf("error parsing ttl to int")
+					diag.AddError("error parsing ttl to int", fmt.Sprintf("value in ttl was %s", val))
+					return hrProperties
 				}
 				hrProperties.ttl = types.Int64Value(ttlval)
 			default:
@@ -315,11 +317,12 @@ func parseHostRecordProperties(properties string) (hostRecordProperties, error) 
 		}
 	}
 
-	customProperties, diag := types.MapValue(types.StringType, cpMap)
+	var customProperties basetypes.MapValue
+	customProperties, diag = basetypes.NewMapValue(types.StringType, cpMap)
 	if diag.HasError() {
-		return hrProperties, fmt.Errorf("error creating custom properties map")
+		return hrProperties
 	}
 	hrProperties.customProperties = customProperties
 
-	return hrProperties, nil
+	return hrProperties
 }
