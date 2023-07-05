@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/umich-vci/gobam"
 )
@@ -234,7 +235,8 @@ func New(version string) func() provider.Provider {
 	}
 }
 
-func clientLogin(loginClient *loginClient, mutex *sync.Mutex, diag diag.Diagnostics) *gobam.ProteusAPI {
+func clientLogin(ctx context.Context, loginClient *loginClient, mutex *sync.Mutex) (gobam.ProteusAPI, diag.Diagnostics) {
+	var diag diag.Diagnostics
 	client := (*loginClient).Client
 	username := (*loginClient).Username
 	password := (*loginClient).Password
@@ -243,18 +245,26 @@ func clientLogin(loginClient *loginClient, mutex *sync.Mutex, diag diag.Diagnost
 	err := client.Login(username, password)
 	if err != nil {
 		mutex.Unlock()
-		diag.AddError("Failed to login client", err.Error())
-		return nil
+		diag.AddError("login error", err.Error())
+		return nil, diag
 	}
-	return &client
+
+	tflog.Trace(ctx, "Client logged in")
+
+	return client, diag
 }
 
-func clientLogout(loginClient *gobam.ProteusAPI, mutex *sync.Mutex, diag diag.Diagnostics) {
+func clientLogout(ctx context.Context, loginClient *gobam.ProteusAPI, mutex *sync.Mutex) diag.Diagnostics {
+	var diag diag.Diagnostics
 	client := *loginClient
 
 	err := client.Logout()
 	mutex.Unlock()
 	if err != nil {
-		diag.AddError("Failed to logout client:", err.Error())
+		diag.AddError("login error", err.Error())
+		return diag
 	}
+
+	tflog.Trace(ctx, "Client logged out")
+	return diag
 }

@@ -133,22 +133,22 @@ func (r *IP4AvailableNetworkResource) Create(ctx context.Context, req resource.C
 		return
 	}
 
-	client := *clientLogin(r.client, mutex, resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 
 	result := int64(-1)
 
 	networkIDList := []int64{}
-	diag := data.NetworkIDList.ElementsAs(ctx, networkIDList, false)
+	diag = data.NetworkIDList.ElementsAs(ctx, networkIDList, false)
 	if diag.HasError() {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Parsing network ids failed",
 			"",
 		)
-		clientLogout(&client, mutex, resp.Diagnostics)
-
 		return
 	}
 
@@ -156,11 +156,11 @@ func (r *IP4AvailableNetworkResource) Create(ctx context.Context, req resource.C
 	random := data.Random.ValueBool()
 
 	if len(networkIDList) == 0 {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"network_id_list cannot be empty",
 			"",
 		)
-		clientLogout(&client, mutex, resp.Diagnostics)
 
 		return
 	}
@@ -178,29 +178,29 @@ func (r *IP4AvailableNetworkResource) Create(ctx context.Context, req resource.C
 
 				entity, err := client.GetEntityById(id)
 				if err != nil {
+					resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 					resp.Diagnostics.AddError(
 						"Failed to get IP4 Network by Id",
 						err.Error(),
 					)
-					clientLogout(&client, mutex, resp.Diagnostics)
 
 					return
 				}
 
 				networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
 				if diag.HasError() {
-					clientLogout(&client, mutex, resp.Diagnostics)
+					resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 					resp.Diagnostics.Append(diag...)
 					return
 				}
 
 				_, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
 				if err != nil {
+					resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 					resp.Diagnostics.AddError(
 						"Error calculating network usage",
 						err.Error(),
 					)
-					clientLogout(&client, mutex, resp.Diagnostics)
 
 					return
 				}
@@ -220,28 +220,30 @@ func (r *IP4AvailableNetworkResource) Create(ctx context.Context, req resource.C
 
 			entity, err := client.GetEntityById(id)
 			if err != nil {
+				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 				resp.Diagnostics.AddError(
 					"Failed to get IP4 Network by Id",
 					err.Error(),
 				)
-				clientLogout(&client, mutex, resp.Diagnostics)
+
 				return
 			}
 
 			networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
 			if diag.HasError() {
-				clientLogout(&client, mutex, resp.Diagnostics)
+				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 				resp.Diagnostics.Append(diag...)
 				return
 			}
 
 			_, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
 			if err != nil {
+				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 				resp.Diagnostics.AddError(
 					"Error calculating network usage",
 					err.Error(),
 				)
-				clientLogout(&client, mutex, resp.Diagnostics)
+
 				return
 			}
 
@@ -261,18 +263,19 @@ func (r *IP4AvailableNetworkResource) Create(ctx context.Context, req resource.C
 	}
 
 	if result == -1 {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"No networks had a free address",
 			"",
 		)
-		clientLogout(&client, mutex, resp.Diagnostics)
+
 		return
 	}
 
 	data.ID = types.StringValue("-")
 	data.NetworkID = types.Int64Value(result)
 
-	clientLogout(&client, mutex, resp.Diagnostics)
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log

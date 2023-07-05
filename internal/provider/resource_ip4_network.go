@@ -209,8 +209,10 @@ func (r *IP4NetworkResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	client := *clientLogin(r.client, mutex, resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+
 		return
 	}
 
@@ -228,7 +230,7 @@ func (r *IP4NetworkResource) Create(ctx context.Context, req resource.CreateRequ
 
 	network, err := client.GetNextAvailableIPRange(parentID, size, Type, properties)
 	if err != nil {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Failed to create IP4 Network",
 			err.Error(),
@@ -251,7 +253,7 @@ func (r *IP4NetworkResource) Create(ctx context.Context, req resource.CreateRequ
 
 	client.Update(&setName)
 	if err != nil {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Failed to update created IP4 Network with name",
 			err.Error(),
@@ -259,7 +261,7 @@ func (r *IP4NetworkResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	clientLogout(&client, mutex, resp.Diagnostics)
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
@@ -279,8 +281,10 @@ func (r *IP4NetworkResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	client := *clientLogin(r.client, mutex, resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+
 		return
 	}
 
@@ -288,7 +292,7 @@ func (r *IP4NetworkResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	entity, err := client.GetEntityById(id)
 	if err != nil {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Failed to get IP4 Network by Id",
 			err.Error(),
@@ -298,8 +302,7 @@ func (r *IP4NetworkResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	if *entity.Id == 0 {
 		data.ID = types.Int64Null()
-
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Failed to create IP4 Network",
 			err.Error(),
@@ -316,7 +319,7 @@ func (r *IP4NetworkResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
 	if diag.HasError() {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.Append(diag...)
 		return
 	}
@@ -335,7 +338,7 @@ func (r *IP4NetworkResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
 	if err != nil {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Error calculating network usage",
 			err.Error(),
@@ -346,7 +349,7 @@ func (r *IP4NetworkResource) Read(ctx context.Context, req resource.ReadRequest,
 	data.AddressesInUse = types.Int64Value(addressesInUse)
 	data.AddressesFree = types.Int64Value(addressesFree)
 
-	clientLogout(&client, mutex, resp.Diagnostics)
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -362,8 +365,10 @@ func (r *IP4NetworkResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	client := *clientLogin(r.client, mutex, resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+
 		return
 	}
 
@@ -381,7 +386,7 @@ func (r *IP4NetworkResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	err := client.Update(&update)
 	if err != nil {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"IP4 Network Update failed",
 			err.Error(),
@@ -389,7 +394,7 @@ func (r *IP4NetworkResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	clientLogout(&client, mutex, resp.Diagnostics)
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -405,8 +410,10 @@ func (r *IP4NetworkResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	client := *clientLogin(r.client, mutex, resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+
 		return
 	}
 
@@ -414,7 +421,7 @@ func (r *IP4NetworkResource) Delete(ctx context.Context, req resource.DeleteRequ
 
 	entity, err := client.GetEntityById(id)
 	if err != nil {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Failed to get IP4 Network by Id",
 			err.Error(),
@@ -423,13 +430,13 @@ func (r *IP4NetworkResource) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 
 	if *entity.Id == 0 {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		return
 	}
 
 	err = client.Delete(id)
 	if err != nil {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Delete failed",
 			err.Error(),
@@ -437,7 +444,7 @@ func (r *IP4NetworkResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	clientLogout(&client, mutex, resp.Diagnostics)
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 }
 
 func (r *IP4NetworkResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

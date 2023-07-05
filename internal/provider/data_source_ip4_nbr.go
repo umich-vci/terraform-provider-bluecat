@@ -235,7 +235,7 @@ func (d *IP4NBRDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	tflog.Info(ctx, fmt.Sprintf("parsing properties: %s", *ipRange.Properties))
 	networkProperties, diag := parseIP4NetworkProperties(*ipRange.Properties)
 	if diag.HasError() {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.Append(diag...)
 		return
 	}

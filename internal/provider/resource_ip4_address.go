@@ -158,8 +158,9 @@ func (r *IP4AddressResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	client := *clientLogin(r.client, mutex, resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 
@@ -177,7 +178,7 @@ func (r *IP4AddressResource) Create(ctx context.Context, req resource.CreateRequ
 
 	ip, err := client.AssignNextAvailableIP4Address(configID, parentID, macAddress, hostInfo, action, properties)
 	if err != nil {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"AssignNextAvailableIP4Address failed",
 			err.Error(),
@@ -187,7 +188,7 @@ func (r *IP4AddressResource) Create(ctx context.Context, req resource.CreateRequ
 
 	data.ID = types.Int64PointerValue(ip.Id)
 
-	clientLogout(&client, mutex, resp.Diagnostics)
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
@@ -207,15 +208,16 @@ func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	client := *clientLogin(r.client, mutex, resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 
 	id := data.ID.ValueInt64()
 	entity, err := client.GetEntityById(id)
 	if err != nil {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Failed to get IP4 Address by Id",
 			err.Error(),
@@ -225,7 +227,7 @@ func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	if *entity.Id == 0 {
 		data.ID = types.Int64Null()
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 		return
 	}
@@ -236,7 +238,7 @@ func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	addressProperties, err := parseIP4AddressProperties(*entity.Properties)
 	if err != nil {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Failed to parse IP4 Address properties",
 			err.Error(),
@@ -249,7 +251,7 @@ func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest,
 	data.MACAddress = addressProperties.macAddress
 	data.CustomProperties = addressProperties.customProperties
 
-	clientLogout(&client, mutex, resp.Diagnostics)
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -265,8 +267,9 @@ func (r *IP4AddressResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	client := *clientLogin(r.client, mutex, resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 
@@ -294,7 +297,7 @@ func (r *IP4AddressResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	err := client.Update(&update)
 	if err != nil {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Failed to update IP4 Address",
 			err.Error(),
@@ -302,7 +305,7 @@ func (r *IP4AddressResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	clientLogout(&client, mutex, resp.Diagnostics)
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -318,8 +321,9 @@ func (r *IP4AddressResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	client := *clientLogin(r.client, mutex, resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 
@@ -327,7 +331,7 @@ func (r *IP4AddressResource) Delete(ctx context.Context, req resource.DeleteRequ
 
 	err := client.Delete(id)
 	if err != nil {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Failed to delete IP4 Address",
 			err.Error(),
@@ -335,7 +339,7 @@ func (r *IP4AddressResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	clientLogout(&client, mutex, resp.Diagnostics)
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 }
 
 func (r *IP4AddressResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

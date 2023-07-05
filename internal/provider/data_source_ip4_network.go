@@ -252,7 +252,7 @@ func (d *IP4NetworkDataSource) Read(ctx context.Context, req datasource.ReadRequ
 
 	networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
 	if diag.HasError() {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.Append(diag...)
 		return
 	}

@@ -269,7 +269,7 @@ func (r *HostRecordResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	hostRecordProperties := parseHostRecordProperties(*entity.Properties, resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		return
 	}
 

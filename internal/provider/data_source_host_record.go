@@ -6,7 +6,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 
@@ -153,7 +152,7 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 
 	hostRecords, err := client.GetHostRecordsByHint(start, count, options)
 	if err != nil {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Failed to get Host Records by hint",
 			fmt.Sprintf("Failed to get Host Records by hint: %s", err.Error()),
@@ -164,7 +163,7 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	resultCount := len(hostRecords.Item)
 
 	if resultCount == 0 {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"No host records returned by GetHostRecordsByHint",
 			fmt.Sprintf("No host records returned with options: %s", options),
@@ -192,7 +191,7 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	}
 
 	if matches == 0 || matches > 1 {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"No exact host record match found for hint",
 			fmt.Sprintf("No exact host record match found for hint: %s. Number of matches was: %d", absoluteName, matches),
@@ -207,7 +206,7 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 
 	hostRecordProperties := parseHostRecordProperties(*hostRecords.Item[matchLocation].Properties, resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
-		clientLogout(&client, mutex, resp.Diagnostics)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		return
 	}
 
@@ -220,8 +219,7 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.CustomProperties = hostRecordProperties.customProperties
 	data.TTL = hostRecordProperties.ttl
 
-	clientLogout(&client, mutex, resp.Diagnostics)
-	log.Printf("[INFO] BlueCat Logout was successful")
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
