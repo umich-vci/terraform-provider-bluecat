@@ -1,0 +1,37 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
+package provider
+
+import (
+	"testing"
+
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+)
+
+func TestAccIP4NetworkDataSource(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Read testing
+			{
+				Config: testAccIP4NetworkDataSourceConfig,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrWith("data.bluecat_ip4_network.test", "id", validateObjectID),
+				),
+			},
+		},
+	})
+}
+
+const testAccIP4NetworkDataSourceConfig = testAccEntityDataSourceConfig + `
+variable "ip4_address" {
+	type = string
+}
+
+data "bluecat_ip4_network" "test" {
+	container_id = data.bluecat_entity.config.id
+	hint         = var.ip4_address
+  }
+`

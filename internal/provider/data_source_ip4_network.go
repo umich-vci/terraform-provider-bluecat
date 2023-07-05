@@ -38,12 +38,12 @@ type IP4NetworkDataSourceModel struct {
 	AllowDuplicateHost        types.String `tfsdk:"allow_duplicate_host"`
 	CIDR                      types.String `tfsdk:"cidr"`
 	CustomProperties          types.Map    `tfsdk:"custom_properties"`
-	DefaultDomains            types.Set    `tfsdk:"default_domain"`
+	DefaultDomains            types.Set    `tfsdk:"default_domains"`
 	DefaultView               types.Int64  `tfsdk:"default_view"`
 	DNSRestrictions           types.Set    `tfsdk:"dns_restrictions"`
 	Gateway                   types.String `tfsdk:"gateway"`
 	InheritAllowDuplicateHost types.Bool   `tfsdk:"inherit_allow_duplicate_host"`
-	InheritDefaultDomains     types.Bool   `tfsdk:"inherit_default_domain"`
+	InheritDefaultDomains     types.Bool   `tfsdk:"inherit_default_domains"`
 	InheritDefaultView        types.Bool   `tfsdk:"inherit_default_view"`
 	InheritDNSRestrictions    types.Bool   `tfsdk:"inherit_dns_restrictions"`
 	InheritPingBeforeAssign   types.Bool   `tfsdk:"inherit_ping_before_assign"`
@@ -81,7 +81,7 @@ func (d *IP4NetworkDataSource) Schema(ctx context.Context, req datasource.Schema
 				MarkdownDescription: "The type of the IP4Network",
 				Computed:            true,
 			},
-			"addresses_free": schema.StringAttribute{
+			"addresses_free": schema.Int64Attribute{
 				MarkdownDescription: "The number of addresses unallocated/free on the network.",
 				Computed:            true,
 			},
