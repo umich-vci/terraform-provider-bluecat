@@ -141,9 +141,11 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	mutex.Lock()
-	client := d.client.Client
-	client.Login(d.client.Username, d.client.Password)
+	client, diag := clientLogin(ctx, d.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
+	}
 
 	start := 0
 	count := 10
@@ -153,10 +155,8 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	hostRecords, err := client.GetHostRecordsByHint(start, count, options)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to get Host Records by hint",
-			fmt.Sprintf("Failed to get Host Records by hint: %s", err.Error()),
-		)
+		resp.Diagnostics.AddError("Failed to get Host Records by hint", err.Error())
+
 		return
 	}
 

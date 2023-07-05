@@ -179,10 +179,7 @@ func (r *IP4AddressResource) Create(ctx context.Context, req resource.CreateRequ
 	ip, err := client.AssignNextAvailableIP4Address(configID, parentID, macAddress, hostInfo, action, properties)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"AssignNextAvailableIP4Address failed",
-			err.Error(),
-		)
+		resp.Diagnostics.AddError("AssignNextAvailableIP4Address failed", err.Error())
 		return
 	}
 
@@ -218,10 +215,7 @@ func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest,
 	entity, err := client.GetEntityById(id)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to get IP4 Address by Id",
-			err.Error(),
-		)
+		resp.Diagnostics.AddError("Failed to get IP4 Address by Id", err.Error())
 		return
 	}
 
@@ -239,10 +233,7 @@ func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest,
 	addressProperties, err := parseIP4AddressProperties(*entity.Properties)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to parse IP4 Address properties",
-			err.Error(),
-		)
+		resp.Diagnostics.AddError("Failed to parse IP4 Address properties", err.Error())
 		return
 	}
 
@@ -298,10 +289,7 @@ func (r *IP4AddressResource) Update(ctx context.Context, req resource.UpdateRequ
 	err := client.Update(&update)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to update IP4 Address",
-			err.Error(),
-		)
+		resp.Diagnostics.AddError("Failed to update IP4 Address", err.Error())
 		return
 	}
 
@@ -332,10 +320,7 @@ func (r *IP4AddressResource) Delete(ctx context.Context, req resource.DeleteRequ
 	err := client.Delete(id)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to delete IP4 Address",
-			err.Error(),
-		)
+		resp.Diagnostics.AddError("Failed to delete IP4 Address", err.Error())
 		return
 	}
 

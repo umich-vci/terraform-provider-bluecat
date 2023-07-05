@@ -6,7 +6,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"log"
 	"math"
 	"strconv"
 	"strings"
@@ -209,21 +208,20 @@ func (d *IP4NBRDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
-	mutex.Lock()
-	client := d.client.Client
-	client.Login(d.client.Username, d.client.Password)
+	client, diag := clientLogin(ctx, d.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
+	}
 
 	containerID := data.ContainerID.ValueInt64()
 	otype := data.Type.ValueString()
 	address := data.Address.ValueString()
 
 	ipRange, err := client.GetIPRangedByIP(containerID, otype, address)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint"); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed to get IP4 Networks by hint",
-			err.Error(),
-		)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to get IP4 Networks by hint", err.Error())
 		return
 	}
 
@@ -258,28 +256,15 @@ func (d *IP4NBRDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	data.CustomProperties = networkProperties.customProperties
 
 	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*ipRange.Id, networkProperties.cidr.ValueString(), client)
-	if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Error parsing host record properties",
-			err.Error(),
-		)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Error calculating network usage", err.Error())
 		return
 	}
 	data.AddressesInUse = types.Int64Value(addressesInUse)
 	data.AddressesFree = types.Int64Value(addressesFree)
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed to logout client",
-			err.Error(),
-		)
-		return
-	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log

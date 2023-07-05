@@ -6,13 +6,11 @@ package provider
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"github.com/umich-vci/gobam"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -198,34 +196,25 @@ func (d *IP4NetworkDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	mutex.Lock()
-	client := d.client.Client
-	client.Login(d.client.Username, d.client.Password)
+	client, diag := clientLogin(ctx, d.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
+	}
 
 	containerID := data.ContainerID.ValueInt64()
 	hint := data.Hint.ValueString()
 	options := "hint=" + hint
 
 	hintResp, err := client.GetIP4NetworksByHint(containerID, 0, 1, options)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Networks by hint"); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed to get IP4 Networks by hint",
-			err.Error(),
-		)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to get IP4 Networks by hint", err.Error())
 		return
 	}
 
 	if len(hintResp.Item) > 1 || len(hintResp.Item) == 0 {
-		err := gobam.LogoutClientWithError(client, "Network lookup error")
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error logging out",
-				err.Error(),
-			)
-		}
-		mutex.Unlock()
-
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Network lookup error",
 			fmt.Sprintf("Hint %s returned %d networks but the data source only supports 1", hint, len(hintResp.Item)),
@@ -237,8 +226,8 @@ func (d *IP4NetworkDataSource) Read(ctx context.Context, req datasource.ReadRequ
 
 	// GetIP4NetworksByHint doesn't seem to return all properties so use the ID returned by it to call GetEntityById
 	entity, err := client.GetEntityById(*hintResp.Item[0].Id)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Network via Entity ID"); err != nil {
-		mutex.Unlock()
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Failed to get IP4 Network via Entity ID",
 			err.Error(),
@@ -276,28 +265,15 @@ func (d *IP4NetworkDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.CustomProperties = networkProperties.customProperties
 
 	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
-	if err = gobam.LogoutClientIfError(client, err, "Error calculating network usage"); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Error calculating network usage",
-			err.Error(),
-		)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Error calculating network usage", err.Error())
 		return
 	}
 	data.AddressesInUse = types.Int64Value(addressesInUse)
 	data.AddressesFree = types.Int64Value(addressesFree)
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed to logout client",
-			err.Error(),
-		)
-		return
-	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log

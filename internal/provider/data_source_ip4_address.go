@@ -6,14 +6,12 @@ package provider
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/umich-vci/gobam"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -122,20 +120,19 @@ func (d *IP4AddressDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	mutex.Lock()
-	client := d.client.Client
-	client.Login(d.client.Username, d.client.Password)
+	client, diag := clientLogin(ctx, d.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
+	}
 
 	containerID := data.ContainerID.ValueInt64()
 	address := data.Address.ValueString()
 
 	ip4Address, err := client.GetIP4Address(containerID, address)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Address"); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed to get IP4 Address",
-			fmt.Sprintf("Failed to get IP4 Address: %s", err.Error()),
-		)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to get IP4 Address", err.Error())
 		return
 	}
 
@@ -146,30 +143,15 @@ func (d *IP4AddressDataSource) Read(ctx context.Context, req datasource.ReadRequ
 
 	addressProperties, err := parseIP4AddressProperties(*ip4Address.Properties)
 	if err != nil {
-		gobam.LogoutClientWithError(client, "Error parsing host record properties")
-		mutex.Unlock()
-
-		resp.Diagnostics.AddError(
-			"Error parsing the host record properties",
-			err.Error(),
-		)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Error parsing the host record properties", err.Error())
 	}
 	data.Address = addressProperties.address
 	data.State = addressProperties.state
 	data.MACAddress = addressProperties.macAddress
 	data.CustomProperties = addressProperties.customProperties
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed logout client",
-			fmt.Sprintf("Unexpected error logging out client: %s", err.Error()),
-		)
-		return
-	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

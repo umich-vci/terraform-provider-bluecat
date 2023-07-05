@@ -6,7 +6,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -105,9 +104,11 @@ func (d *entityDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
-	mutex.Lock()
-	client := d.client.Client
-	client.Login(d.client.Username, d.client.Password)
+	client, diag := clientLogin(ctx, d.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
+	}
 
 	parentID := data.ParentID.ValueInt64()
 
@@ -115,23 +116,15 @@ func (d *entityDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	objType := data.Type.ValueString()
 
 	entity, err := client.GetEntityByName(parentID, name, objType)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get entity by name: %s"); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed to get entity by name",
-			fmt.Sprintf("Failed to get entity by name: %s", err.Error()),
-		)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to get entity by name", err.Error())
 		return
 	}
 
 	if *entity.Id == 0 {
-		gobam.LogoutClientWithError(client, "Entity not found")
-		mutex.Unlock()
-
-		resp.Diagnostics.AddError(
-			"Entity not found",
-			"Entity ID returned was 0",
-		)
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Entity not found", "Entity ID returned was 0")
 
 		return
 	}
@@ -139,17 +132,7 @@ func (d *entityDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	data.Id = types.Int64Value(*entity.Id)
 	data.Properties = types.StringValue(*entity.Properties)
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed logout client",
-			fmt.Sprintf("Unexpected error logging out client: %s", err.Error()),
-		)
-		return
-	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log

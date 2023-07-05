@@ -6,7 +6,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 
@@ -163,23 +162,21 @@ func (r *HostRecordResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	mutex.Lock()
-	client := r.client.Client
-	client.Login(r.client.Username, r.client.Password)
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
+	}
 
 	viewID := data.ViewID.ValueInt64()
 	absoluteName := data.Name.ValueString() + "." + data.DNSZone.ValueString()
 	ttl := data.TTL.ValueInt64()
 
 	addresses := []string{}
-	diag := data.Addresses.ElementsAs(ctx, addresses, false)
+	diag = data.Addresses.ElementsAs(ctx, addresses, false)
 	if diag.HasError() {
-		resp.Diagnostics.AddError(
-			"Parsing addresses failed",
-			"",
-		)
-		gobam.LogoutClientWithError(client, "arsing addresses failed")
-		mutex.Unlock()
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 
@@ -193,26 +190,15 @@ func (r *HostRecordResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	host, err := client.AddHostRecord(viewID, absoluteName, strings.Join(addresses, ","), ttl, properties)
-	if err = gobam.LogoutClientIfError(client, err, "AddHostRecord failed"); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"AddHostRecord failed",
-			err.Error(),
-		)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("AddHostRecord failed", err.Error())
 		return
 	}
 
 	data.ID = types.Int64Value(host)
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed to logout client",
-			err.Error(),
-		)
-		return
-	}
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
@@ -232,34 +218,24 @@ func (r *HostRecordResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	mutex.Lock()
-	client := r.client.Client
-	client.Login(r.client.Username, r.client.Password)
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
+	}
 
 	id := data.ID.ValueInt64()
 
 	entity, err := client.GetEntityById(id)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get host record by Id"); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed to get entity by name",
-			fmt.Sprintf("Failed to get entity by name: %s", err.Error()),
-		)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to get host record by Id", err.Error())
 		return
 	}
 
 	if *entity.Id == 0 {
 		data.ID = types.Int64Null()
-		if err := client.Logout(); err != nil {
-			mutex.Unlock()
-			resp.Diagnostics.AddError(
-				"Error logging out after API call",
-				err.Error(),
-			)
-			return
-		}
-
-		mutex.Unlock()
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		return
 	}
 
@@ -279,17 +255,7 @@ func (r *HostRecordResource) Read(ctx context.Context, req resource.ReadRequest,
 	data.ReverseRecord = hostRecordProperties.reverseRecord
 	data.TTL = hostRecordProperties.ttl
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed to logout client",
-			err.Error(),
-		)
-		return
-	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -305,9 +271,11 @@ func (r *HostRecordResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	mutex.Lock()
-	client := r.client.Client
-	client.Login(r.client.Username, r.client.Password)
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
+	}
 
 	id := data.ID.ValueInt64()
 	name := data.Name.ValueString()
@@ -315,14 +283,13 @@ func (r *HostRecordResource) Update(ctx context.Context, req resource.UpdateRequ
 	ttl := strconv.FormatInt(data.TTL.ValueInt64(), 10)
 
 	addresses := []string{}
-	diag := data.Addresses.ElementsAs(ctx, addresses, false)
+	diag = data.Addresses.ElementsAs(ctx, addresses, false)
 	if diag.HasError() {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Parsing addresses failed",
 			"",
 		)
-		gobam.LogoutClientWithError(client, "arsing addresses failed")
-		mutex.Unlock()
 		return
 	}
 
@@ -343,24 +310,13 @@ func (r *HostRecordResource) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	err := client.Update(&update)
-	if err = gobam.LogoutClientIfError(client, err, "Host Record Update failed"); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Host Record Update failed",
-			err.Error(),
-		)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Host Record Update failed", err.Error())
 		return
 	}
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed to logout client",
-			err.Error(),
-		)
-		return
-	}
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -376,55 +332,35 @@ func (r *HostRecordResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	mutex.Lock()
-	client := r.client.Client
-	client.Login(r.client.Username, r.client.Password)
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
+	}
 
 	id := data.ID.ValueInt64()
 
 	entity, err := client.GetEntityById(id)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get host record by Id"); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed to get host record by id",
-			err.Error(),
-		)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to get host record by id", err.Error())
 		return
 	}
 
 	if *entity.Id == 0 {
-		if err := client.Logout(); err != nil {
-			mutex.Unlock()
-			resp.Diagnostics.AddError(
-				"Failed to logout client",
-				err.Error(),
-			)
-			return
-		}
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
-		mutex.Unlock()
 		return
 	}
 
 	err = client.Delete(id)
-	if err = gobam.LogoutClientIfError(client, err, "Delete failed"); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Host Record Delete failed",
-			err.Error(),
-		)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Host Record Delete failed", err.Error())
 		return
 	}
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		resp.Diagnostics.AddError(
-			"Failed to logout client",
-			err.Error(),
-		)
-		return
-	}
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 }
 
 func (r *HostRecordResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
