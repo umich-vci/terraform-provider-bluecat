@@ -2,213 +2,278 @@ package provider
 
 import (
 	"context"
-	"log"
-	"strconv"
+	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/umich-vci/gobam"
 )
 
-func resourceIP4Address() *schema.Resource {
-	return &schema.Resource{
-		Description: "Resource to reserve an IPv4 address.",
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &IP4AddressResource{}
+var _ resource.ResourceWithImportState = &IP4AddressResource{}
 
-		CreateContext: resourceIP4AddressCreate,
-		ReadContext:   resourceIP4AddressRead,
-		UpdateContext: resourceIP4AddressUpdate,
-		DeleteContext: resourceIP4AddressDelete,
+func NewIP4AddressResource() resource.Resource {
+	return &IP4AddressResource{}
+}
 
-		Schema: map[string]*schema.Schema{
-			"configuration_id": {
-				Description: "The object ID of the Configuration that will hold the new address. If changed, forces a new resource.",
-				Type:        schema.TypeString,
-				Required:    true,
-				ForceNew:    true,
-			},
-			"name": {
-				Description: "The name assigned to the IPv4 address. This is not related to DNS.",
-				Type:        schema.TypeString,
-				Required:    true,
-			},
-			"parent_id": {
-				Description: "The object ID of the Configuration, Block, or Network to find the next available IPv4 address in. If changed, forces a new resource.",
-				Type:        schema.TypeString,
-				Required:    true,
-				ForceNew:    true,
-			},
-			"action": {
-				Description:  "The action to take on the next available IPv4 address.  Must be one of: \"MAKE_STATIC\", \"MAKE_RESERVED\", or \"MAKE_DHCP_RESERVED\". If changed, forces a new resource.",
-				Type:         schema.TypeString,
-				Optional:     true,
-				Default:      "MAKE_STATIC",
-				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice(gobam.IPAssignmentActions, false),
-			},
-			"custom_properties": {
-				Description: "A map of all custom properties associated with the IPv4 address.",
-				Type:        schema.TypeMap,
-				Optional:    true,
-				Computed:    true,
-				Elem: &schema.Schema{
-					Type: schema.TypeString,
+// IP4AddressResource defines the resource implementation.
+type IP4AddressResource struct {
+	client *loginClient
+}
+
+// ExampleResourceModel describes the resource data model.
+type IP4AddressResourceModel struct {
+	ID               types.Int64  `tfsdk:"id"`
+	ConfigurationID  types.Int64  `tfsdk:"configuration_id"`
+	Name             types.String `tfsdk:"name"`
+	ParentID         types.Int64  `tfsdk:"parent_id"`
+	Action           types.String `tfsdk:"action"`
+	CustomProperties types.Map    `tfsdk:"custom_properties"`
+	MACAddress       types.String `tfsdk:"mac_address"`
+	Address          types.String `tfsdk:"address"`
+	Properties       types.String `tfsdk:"properties"`
+	State            types.String `tfsdk:"state"`
+	Type             types.String `tfsdk:"type"`
+}
+
+func (r *IP4AddressResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_ip4_address"
+}
+
+func (r *IP4AddressResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		// This description is used by the documentation generator and the language server.
+		MarkdownDescription: "Resource to reserve an IPv4 address.",
+
+		Attributes: map[string]schema.Attribute{
+			"id": schema.Int64Attribute{
+				Computed:            true,
+				MarkdownDescription: "IP4 address identifier",
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
 				},
 			},
-			"mac_address": {
-				Description: "The MAC address to associate with the IPv4 address.",
-				Type:        schema.TypeString,
-				Optional:    true,
-				Default:     "",
+			"configuration_id": schema.Int64Attribute{
+				MarkdownDescription: "The object ID of the Configuration that will hold the new address. If changed, forces a new resource.",
+				Required:            true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.RequiresReplace(),
+				},
 			},
-			"address": {
-				Description: "The IPv4 address that was allocated.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"name": schema.StringAttribute{
+				MarkdownDescription: "The name assigned to the IPv4 address. This is not related to DNS.",
+				Required:            true,
 			},
-			"properties": {
-				Description: "The properties of the IPv4 address as returned by the API (pipe delimited).",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"parent_id": schema.Int64Attribute{
+				MarkdownDescription: "The object ID of the Configuration, Block, or Network to find the next available IPv4 address in. If changed, forces a new resource.",
+				Required:            true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.RequiresReplace(),
+				},
 			},
-			"state": {
-				Description: "The state of the IPv4 address.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"action": schema.StringAttribute{
+				MarkdownDescription: "The action to take on the next available IPv4 address.  Must be one of: \"MAKE_STATIC\", \"MAKE_RESERVED\", or \"MAKE_DHCP_RESERVED\". If changed, forces a new resource.",
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("MAKE_STATIC"),
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+				Validators: []validator.String{
+					stringvalidator.OneOf(gobam.IPAssignmentActions...),
+				},
 			},
-			"type": {
-				Description: "The type of the resource.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"custom_properties": schema.MapAttribute{
+				MarkdownDescription: "A map of all custom properties associated with the IPv4 address.",
+				Optional:            true,
+				Computed:            true,
+				ElementType:         types.StringType,
+			},
+			"mac_address": schema.StringAttribute{
+				MarkdownDescription: "The MAC address to associate with the IPv4 address.",
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString(""),
+			},
+			"address": schema.StringAttribute{
+				MarkdownDescription: "The IPv4 address that was allocated.",
+				Computed:            true,
+			},
+			"properties": schema.StringAttribute{
+				MarkdownDescription: "The properties of the IPv4 address as returned by the API (pipe delimited).",
+				Computed:            true,
+			},
+			"state": schema.StringAttribute{
+				MarkdownDescription: "The state of the IPv4 address.",
+				Computed:            true,
+			},
+			"type": schema.StringAttribute{
+				MarkdownDescription: "The type of the resource.",
+				Computed:            true,
 			},
 		},
 	}
 }
 
-func resourceIP4AddressCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
-
-	configID, err := strconv.ParseInt(d.Get("configuration_id").(string), 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert configuration_id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+func (r *IP4AddressResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
 	}
 
-	parentIDString := d.Get("parent_id").(string)
+	client, ok := req.ProviderData.(*loginClient)
 
-	parentID, err := strconv.ParseInt(parentIDString, 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert parent_id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
 	}
-	macAddress := d.Get("mac_address").(string)
+
+	r.client = client
+}
+
+func (r *IP4AddressResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data *IP4AddressResourceModel
+
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
+	}
+
+	configID := data.ConfigurationID.ValueInt64()
+	parentID := data.ParentID.ValueInt64()
+	macAddress := data.MACAddress.ValueString()
 	hostInfo := "" // host records should be created as a separate resource
-	action := d.Get("action").(string)
-	name := d.Get("name").(string)
+	action := data.Action.ValueString()
+	name := data.Name.ValueString()
 	properties := "name=" + name + "|"
-	customProperties := make(map[string]string)
-	if rawCustomProperties, ok := d.GetOk("custom_properties"); ok {
-		for k, v := range rawCustomProperties.(map[string]interface{}) {
-			customProperties[k] = v.(string)
-			properties = properties + k + "=" + v.(string) + "|"
-		}
+	customProperties := data.CustomProperties.Elements()
+	for k, v := range customProperties {
+		properties = properties + k + "=" + v.String() + "|"
 	}
 
-	resp, err := client.AssignNextAvailableIP4Address(configID, parentID, macAddress, hostInfo, action, properties)
-	if err = gobam.LogoutClientIfError(client, err, "AssignNextAvailableIP4Address failed"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	ip, err := client.AssignNextAvailableIP4Address(configID, parentID, macAddress, hostInfo, action, properties)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("AssignNextAvailableIP4Address failed", err.Error())
+		return
 	}
 
-	d.SetId(strconv.FormatInt(*resp.Id, 10))
+	data.ID = types.Int64PointerValue(ip.Id)
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
-	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
-	return resourceIP4AddressRead(ctx, d, meta)
+	// Write logs using the tflog package
+	// Documentation: https://terraform.io/plugin/log
+	tflog.Trace(ctx, "created a resource")
+
+	// Save data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceIP4AddressRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
+func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data *IP4AddressResourceModel
 
-	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	resp, err := client.GetEntityById(id)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Address by Id"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
 	}
 
-	if *resp.Id == 0 {
-		d.SetId("")
-
-		if err := client.Logout(); err != nil {
-			mutex.Unlock()
-			return diag.FromErr(err)
-		}
-
-		mutex.Unlock()
-		return nil
+	id := data.ID.ValueInt64()
+	entity, err := client.GetEntityById(id)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to get IP4 Address by Id", err.Error())
+		return
 	}
 
-	d.Set("name", resp.Name)
-	d.Set("properties", resp.Properties)
-	d.Set("type", resp.Type)
-
-	addressProperties := parseIP4AddressProperties(*resp.Properties)
-	d.Set("address", addressProperties.address)
-	d.Set("state", addressProperties.state)
-	d.Set("mac_address", addressProperties.macAddress)
-	d.Set("custom_properties", addressProperties.customProperties)
-
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	if *entity.Id == 0 {
+		data.ID = types.Int64Null()
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+		return
 	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
 
-	return nil
+	data.Name = types.StringPointerValue(entity.Name)
+	data.Properties = types.StringPointerValue(entity.Properties)
+	data.Type = types.StringPointerValue(entity.Type)
+
+	addressProperties, err := parseIP4AddressProperties(*entity.Properties)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to parse IP4 Address properties", err.Error())
+		return
+	}
+
+	data.Address = addressProperties.address
+	data.State = addressProperties.state
+	data.MACAddress = addressProperties.macAddress
+	data.CustomProperties = addressProperties.customProperties
+
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceIP4AddressUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
+func (r *IP4AddressResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data *IP4AddressResourceModel
 
-	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	macAddress := d.Get("mac_address").(string)
-	name := d.Get("name").(string)
-	otype := d.Get("type").(string)
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
+	}
+
+	id := data.ID.ValueInt64()
+	macAddress := data.MACAddress.ValueString()
+	name := data.Name.ValueString()
+	otype := data.Type.ValueString()
 	properties := "name=" + name + "|"
 
 	if macAddress != "" {
 		properties = properties + "macAddress=" + macAddress + "|"
 	}
 
-	if customProperties, ok := d.GetOk("custom_properties"); ok {
-		for k, v := range customProperties.(map[string]string) {
-			properties = properties + k + "=" + v + "|"
-		}
+	customProperties := data.CustomProperties.Elements()
+	for k, v := range customProperties {
+		properties = properties + k + "=" + v.String() + "|"
 	}
 
 	update := gobam.APIEntity{
@@ -218,63 +283,47 @@ func resourceIP4AddressUpdate(ctx context.Context, d *schema.ResourceData, meta 
 		Type:       &otype,
 	}
 
-	err = client.Update(&update)
-	if err = gobam.LogoutClientIfError(client, err, "IP4 Address Update failed"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	err := client.Update(&update)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to update IP4 Address", err.Error())
+		return
 	}
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
-	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
-	return resourceIP4AddressRead(ctx, d, meta)
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceIP4AddressDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
+func (r *IP4AddressResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data *IP4AddressResourceModel
 
-	id, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	resp, err := client.GetEntityById(id)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Address by Id"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	client, diag := clientLogin(ctx, r.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
 	}
 
-	if *resp.Id == 0 {
-		if err := client.Logout(); err != nil {
-			mutex.Unlock()
-			return diag.FromErr(err)
-		}
+	id := data.ID.ValueInt64()
 
-		mutex.Unlock()
-		return nil
+	err := client.Delete(id)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to delete IP4 Address", err.Error())
+		return
 	}
 
-	err = client.Delete(id)
-	if err = gobam.LogoutClientIfError(client, err, "Delete failed"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
-	}
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+}
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
-	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
-
-	return nil
+func (r *IP4AddressResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

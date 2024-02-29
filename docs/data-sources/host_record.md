@@ -3,12 +3,12 @@
 page_title: "bluecat_host_record Data Source - terraform-provider-bluecat"
 subcategory: ""
 description: |-
-  Data source to access the attributes of a host record. If the API returns more than one host record that matches, an error will be returned.
+  Example data source
 ---
 
 # bluecat_host_record (Data Source)
 
-Data source to access the attributes of a host record. If the API returns more than one host record that matches, an error will be returned.
+Example data source
 
 ## Example Usage
 
@@ -29,23 +29,16 @@ output "bluecat_host_addresses" {
 
 - `absolute_name` (String) The absolute name/fqdn of the host record.
 
-### Optional
-
-- `result_count` (Number) The number of results the API should return. This must be between 1 and 10.  You most likely want to leave this alone. Defaults to `10`.
-- `start` (Number) The start index of the search results the API should return. You most likely want to leave this alone. Defaults to `0`.
-
 ### Read-Only
 
-- `address_ids` (Set of String) A set of all address ids associated with the host record.
+- `address_ids` (Set of Number) A set of all address ids associated with the host record.
 - `addresses` (Set of String) A set of all addresses associated with the host record.
 - `custom_properties` (Map of String) A map of all custom properties associated with the host record.
-- `id` (String) The ID of this resource.
+- `id` (Number) Entity identifier
 - `name` (String) The short name of the host record.
-- `parent_id` (String) The ID of the parent of the host record.
+- `parent_id` (Number) The ID of the parent of the host record.
 - `parent_type` (String) The type of the parent of the host record.
 - `properties` (String) The properties of the host record as returned by the API (pipe delimited).
 - `reverse_record` (Boolean) A boolean that represents if the host record should set reverse records.
 - `ttl` (Number) The TTL of the host record.
 - `type` (String) The type of the resource.
-
-

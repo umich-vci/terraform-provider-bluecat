@@ -30,13 +30,13 @@ output "bluecat_ip4_network_cidr" {
 ### Required
 
 - `name` (String) The display name of the IPv4 network.
-- `parent_id` (String) The object ID of the parent object that will contain the new IPv4 network. If this argument is changed, then the resource will be recreated.
+- `parent_id` (Number) The object ID of the parent object that will contain the new IPv4 network. If this argument is changed, then the resource will be recreated.
 - `size` (Number) The size of the IPv4 network expressed as a power of 2. For example, 256 would create a /24. If this argument is changed, then the resource will be recreated.
 
 ### Optional
 
-- `is_larger_allowed` (Boolean) (Optional) Is it ok to return a network that is larger than the size specified? Defaults to `false`.
-- `traversal_method` (String) The traversal method used to find the range to allocate the network. Must be one of "NO_TRAVERSAL", "DEPTH_FIRST", or "BREADTH_FIRST". Defaults to `NO_TRAVERSAL`.
+- `is_larger_allowed` (Boolean) (Optional) Is it ok to return a network that is larger than the size specified?
+- `traversal_method` (String) The traversal method used to find the range to allocate the network. Must be one of "NO_TRAVERSAL", "DEPTH_FIRST", or "BREADTH_FIRST".
 
 ### Read-Only
 
@@ -44,9 +44,10 @@ output "bluecat_ip4_network_cidr" {
 - `addresses_in_use` (Number) The number of addresses allocated/in use on the network.
 - `allow_duplicate_host` (String) Duplicate host names check.
 - `cidr` (String) The CIDR address of the IPv4 network.
-- `default_view` (String) The object id of the default DNS View for the network.
+- `custom_properties` (Map of String) A map of all custom properties associated with the IPv4 network.
+- `default_view` (Number) The object id of the default DNS View for the network.
 - `gateway` (String) The gateway of the IPv4 network.
-- `id` (String) The ID of this resource.
+- `id` (Number) IPv4 Network identifier.
 - `inherit_allow_duplicate_host` (Boolean) Duplicate host names check is inherited.
 - `inherit_default_domains` (Boolean) Default domains are inherited.
 - `inherit_default_view` (Boolean) The default DNS Viewis inherited.
@@ -55,5 +56,3 @@ output "bluecat_ip4_network_cidr" {
 - `ping_before_assign` (String) The network pings an address before assignment.
 - `properties` (String) The properties of the resource as returned by the API (pipe delimited).
 - `type` (String) The type of the resource.
-
-

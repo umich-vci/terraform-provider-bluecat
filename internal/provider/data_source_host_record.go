@@ -3,120 +3,177 @@ package provider
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/umich-vci/gobam"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
-func dataSourceHostRecord() *schema.Resource {
-	return &schema.Resource{
-		Description: "Data source to access the attributes of a host record. If the API returns more than one host record that matches, an error will be returned.",
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ datasource.DataSource = &HostRecordDataSource{}
 
-		ReadContext: dataSourceHostRecordRead,
+func NewHostRecordDataSource() datasource.DataSource {
+	return &HostRecordDataSource{}
+}
 
-		Schema: map[string]*schema.Schema{
-			"absolute_name": {
-				Description: "The absolute name/fqdn of the host record.",
-				Type:        schema.TypeString,
-				Required:    true,
+// HostRecordDataSource defines the data source implementation.
+type HostRecordDataSource struct {
+	client *loginClient
+}
+
+// HostRecordDataSourceModel describes the data source data model.
+type HostRecordDataSourceModel struct {
+	ID               types.Int64  `tfsdk:"id"`
+	AbsoluteName     types.String `tfsdk:"absolute_name"`
+	Addresses        types.Set    `tfsdk:"addresses"`
+	AddressIDs       types.Set    `tfsdk:"address_ids"`
+	CustomProperties types.Map    `tfsdk:"custom_properties"`
+	Name             types.String `tfsdk:"name"`
+	ParentID         types.Int64  `tfsdk:"parent_id"`
+	ParentType       types.String `tfsdk:"parent_type"`
+	Properties       types.String `tfsdk:"properties"`
+	ReverseRecord    types.Bool   `tfsdk:"reverse_record"`
+	TTL              types.Int64  `tfsdk:"ttl"`
+	Type             types.String `tfsdk:"type"`
+}
+
+func (d *HostRecordDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_host_record"
+}
+
+func (d *HostRecordDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		// This description is used by the documentation generator and the language server.
+		MarkdownDescription: "Example data source",
+
+		Attributes: map[string]schema.Attribute{
+			"id": schema.Int64Attribute{
+				MarkdownDescription: "Entity identifier",
+				Computed:            true,
 			},
-			"result_count": {
-				Description: "The number of results the API should return. This must be between 1 and 10.  You most likely want to leave this alone.",
-				Type:        schema.TypeInt,
-				Optional:    true,
-				Default:     10,
+			"absolute_name": schema.StringAttribute{
+				MarkdownDescription: "The absolute name/fqdn of the host record.",
+				Required:            true,
 			},
-			"start": {
-				Description: "The start index of the search results the API should return. You most likely want to leave this alone.",
-				Type:        schema.TypeInt,
-				Optional:    true,
-				Default:     0,
+			"addresses": schema.SetAttribute{
+				MarkdownDescription: "A set of all addresses associated with the host record.",
+				Computed:            true,
+				ElementType:         types.StringType,
 			},
-			"addresses": {
-				Description: "A set of all addresses associated with the host record.",
-				Type:        schema.TypeSet,
-				Computed:    true,
-				Elem:        &schema.Schema{Type: schema.TypeString},
+			"address_ids": schema.SetAttribute{
+				MarkdownDescription: "A set of all address ids associated with the host record.",
+				Computed:            true,
+				ElementType:         types.Int64Type,
 			},
-			"address_ids": {
-				Description: "A set of all address ids associated with the host record.",
-				Type:        schema.TypeSet,
-				Computed:    true,
-				Elem:        &schema.Schema{Type: schema.TypeString},
+			"custom_properties": schema.MapAttribute{
+				MarkdownDescription: "A map of all custom properties associated with the host record.",
+				Computed:            true,
+				ElementType:         types.StringType,
 			},
-			"custom_properties": {
-				Description: "A map of all custom properties associated with the host record.",
-				Type:        schema.TypeMap,
-				Computed:    true,
-				Elem: &schema.Schema{
-					Type: schema.TypeString,
-				},
+			"name": schema.StringAttribute{
+				MarkdownDescription: "The short name of the host record.",
+				Computed:            true,
 			},
-			"name": {
-				Description: "The short name of the host record.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"parent_id": schema.Int64Attribute{
+				MarkdownDescription: "The ID of the parent of the host record.",
+				Computed:            true,
 			},
-			"parent_id": {
-				Description: "The ID of the parent of the host record.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"parent_type": schema.StringAttribute{
+				MarkdownDescription: "The type of the parent of the host record.",
+				Computed:            true,
 			},
-			"parent_type": {
-				Description: "The type of the parent of the host record.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"properties": schema.StringAttribute{
+				MarkdownDescription: "The properties of the host record as returned by the API (pipe delimited).",
+				Computed:            true,
 			},
-			"properties": {
-				Description: "The properties of the host record as returned by the API (pipe delimited).",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"reverse_record": schema.BoolAttribute{
+				MarkdownDescription: "A boolean that represents if the host record should set reverse records.",
+				Computed:            true,
 			},
-			"reverse_record": {
-				Description: "A boolean that represents if the host record should set reverse records.",
-				Type:        schema.TypeBool,
-				Computed:    true,
+			"ttl": schema.Int64Attribute{
+				MarkdownDescription: "The TTL of the host record.",
+				Computed:            true,
 			},
-			"ttl": {
-				Description: "The TTL of the host record.",
-				Type:        schema.TypeInt,
-				Computed:    true,
-			},
-			"type": {
-				Description: "The type of the resource.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"type": schema.StringAttribute{
+				MarkdownDescription: "The type of the resource.",
+				Computed:            true,
 			},
 		},
 	}
 }
 
-func dataSourceHostRecordRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
-
-	start := d.Get("start").(int)
-	count := d.Get("result_count").(int)
-	absoluteName := d.Get("absolute_name").(string)
-	options := "hint=^" + absoluteName + "$|"
-
-	resp, err := client.GetHostRecordsByHint(start, count, options)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get Host Records by hint"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+func (d *HostRecordDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
 	}
 
-	log.Printf("[INFO] GetHostRecordsByHint returned %s results", strconv.Itoa(len(resp.Item)))
+	client, ok := req.ProviderData.(*loginClient)
+
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Data Source Configure Type",
+			fmt.Sprintf("Expected *loginClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	d.client = client
+}
+
+func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data HostRecordDataSourceModel
+
+	// Read Terraform configuration data into the model
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	client, diag := clientLogin(ctx, d.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
+	}
+
+	start := 0
+	count := 10
+	absoluteName := data.AbsoluteName.ValueString()
+	options := fmt.Sprintf("hint=^%s$|retrieveFields=true", absoluteName)
+
+	hostRecords, err := client.GetHostRecordsByHint(start, count, options)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to get Host Records by hint", err.Error())
+
+		return
+	}
+
+	resultCount := len(hostRecords.Item)
+
+	if resultCount == 0 {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError(
+			"No host records returned by GetHostRecordsByHint",
+			fmt.Sprintf("No host records returned with options: %s", options),
+		)
+		return
+	}
+
+	tflog.Info(ctx, fmt.Sprintf("GetHostRecordsByHint returned %s results", strconv.Itoa(resultCount)))
 
 	matches := 0
 	matchLocation := -1
-	for x := range resp.Item {
-		properties := *resp.Item[x].Properties
+	for x := range hostRecords.Item {
+		properties := *hostRecords.Item[x].Properties
 		props := strings.Split(properties, "|")
 		for y := range props {
 			if len(props[y]) > 0 {
@@ -131,61 +188,62 @@ func dataSourceHostRecordRead(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	if matches == 0 || matches > 1 {
-		err := fmt.Errorf("no exact host record match found for: %s", absoluteName)
-		if err = gobam.LogoutClientIfError(client, err, "No exact host record match found for hint"); err != nil {
-			mutex.Unlock()
-			return diag.FromErr(err)
-		}
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError(
+			"No exact host record match found for hint",
+			fmt.Sprintf("No exact host record match found for hint: %s. Number of matches was: %d", absoluteName, matches),
+		)
+		return
 	}
 
-	d.SetId(strconv.FormatInt(*resp.Item[matchLocation].Id, 10))
-	d.Set("name", resp.Item[matchLocation].Name)
-	d.Set("properties", resp.Item[matchLocation].Properties)
-	d.Set("type", resp.Item[matchLocation].Type)
+	data.ID = types.Int64Value(*hostRecords.Item[matchLocation].Id)
+	data.Name = types.StringValue(*hostRecords.Item[matchLocation].Name)
+	data.Properties = types.StringValue(*hostRecords.Item[matchLocation].Properties)
+	data.Type = types.StringValue(*hostRecords.Item[matchLocation].Type)
 
-	hostRecordProperties, err := parseHostRecordProperties(*resp.Item[matchLocation].Properties)
-	if err = gobam.LogoutClientIfError(client, err, "Error parsing host record properties"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+	hostRecordProperties := parseHostRecordProperties(*hostRecords.Item[matchLocation].Properties, resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		return
 	}
 
-	d.Set("absolute_name", hostRecordProperties.absoluteName)
-	d.Set("parent_id", hostRecordProperties.parentID)
-	d.Set("parent_type", hostRecordProperties.parentType)
-	d.Set("reverse_record", hostRecordProperties.reverseRecord)
-	d.Set("addresses", hostRecordProperties.addresses)
-	d.Set("address_ids", hostRecordProperties.addressIDs)
-	d.Set("custom_properties", hostRecordProperties.customProperties)
-	d.Set("ttl", hostRecordProperties.ttl)
+	data.AbsoluteName = hostRecordProperties.absoluteName
+	data.ParentID = hostRecordProperties.parentID
+	data.ParentType = hostRecordProperties.parentType
+	data.ReverseRecord = hostRecordProperties.reverseRecord
+	data.Addresses = hostRecordProperties.addresses
+	data.AddressIDs = hostRecordProperties.addressIDs
+	data.CustomProperties = hostRecordProperties.customProperties
+	data.TTL = hostRecordProperties.ttl
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
-	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
-	return nil
+	// Write logs using the tflog package
+	// Documentation: https://terraform.io/plugin/log
+	tflog.Trace(ctx, "read a data source")
+
+	// Save data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 type hostRecordProperties struct {
-	absoluteName     string
-	parentID         string
-	parentType       string
-	ttl              int
-	reverseRecord    bool
-	addresses        []string
-	addressIDs       []string
-	customProperties map[string]string
+	absoluteName     types.String
+	parentID         types.Int64
+	parentType       types.String
+	ttl              types.Int64
+	reverseRecord    types.Bool
+	addresses        types.Set
+	addressIDs       types.Set
+	customProperties types.Map
 }
 
-func parseHostRecordProperties(properties string) (hostRecordProperties, error) {
+func parseHostRecordProperties(properties string, diag diag.Diagnostics) hostRecordProperties {
 	var hrProperties hostRecordProperties
-	hrProperties.customProperties = make(map[string]string)
+
+	cpMap := make(map[string]attr.Value)
 
 	// if ttl isn't returned as a property it will remain set at -1
-	hrProperties.ttl = -1
+	hrProperties.ttl = types.Int64Value(-1)
 
 	props := strings.Split(properties, "|")
 	for x := range props {
@@ -195,38 +253,71 @@ func parseHostRecordProperties(properties string) (hostRecordProperties, error) 
 
 			switch prop {
 			case "absoluteName":
-				hrProperties.absoluteName = val
+				hrProperties.absoluteName = types.StringValue(val)
 			case "parentId":
-				hrProperties.parentID = val
+				pID, err := strconv.ParseInt(val, 10, 64)
+				if err != nil {
+					diag.AddError("error parsing parentId to int64", fmt.Sprintf("value of parentId was %s", val))
+					return hrProperties
+				}
+				hrProperties.parentID = types.Int64Value(pID)
 			case "parentType":
-				hrProperties.parentType = val
+				hrProperties.parentType = types.StringValue(val)
 			case "reverseRecord":
 				b, err := strconv.ParseBool(val)
 				if err != nil {
-					return hrProperties, fmt.Errorf("error parsing reverseRecord to bool")
+					diag.AddError("error parsing reverseRecord to bool", fmt.Sprintf("value of reverseRecord was %s", val))
+					return hrProperties
 				}
-				hrProperties.reverseRecord = b
+				hrProperties.reverseRecord = types.BoolValue(b)
 			case "addresses":
 				addresses := strings.Split(val, ",")
+				addressList := []attr.Value{}
 				for i := range addresses {
-					hrProperties.addresses = append(hrProperties.addresses, addresses[i])
+					addressList = append(addressList, types.StringValue(addresses[i]))
 				}
+				var addressSet basetypes.SetValue
+				addressSet, diag = types.SetValue(types.StringType, addressList)
+				if diag.HasError() {
+					return hrProperties
+				}
+				hrProperties.addresses = addressSet
 			case "addressIds":
 				addressIDs := strings.Split(val, ",")
+				aidList := []attr.Value{}
 				for i := range addressIDs {
-					hrProperties.addressIDs = append(hrProperties.addressIDs, addressIDs[i])
+					aID, err := strconv.ParseInt(addressIDs[i], 10, 64)
+					if err != nil {
+						diag.AddError("error parsing addressIds to int64", fmt.Sprintf("value in addressIds was %s", val))
+						return hrProperties
+					}
+					aidList = append(aidList, types.Int64Value(aID))
 				}
+				var aidSet basetypes.SetValue
+				aidSet, diag = basetypes.NewSetValue(types.Int64Type, aidList)
+				if diag.HasError() {
+					return hrProperties
+				}
+				hrProperties.addressIDs = aidSet
 			case "ttl":
-				ttlval, err := strconv.Atoi(val)
+				ttlval, err := strconv.ParseInt(val, 10, 64)
 				if err != nil {
-					return hrProperties, fmt.Errorf("error parsing ttl to int")
+					diag.AddError("error parsing ttl to int", fmt.Sprintf("value in ttl was %s", val))
+					return hrProperties
 				}
-				hrProperties.ttl = ttlval
+				hrProperties.ttl = types.Int64Value(ttlval)
 			default:
-				hrProperties.customProperties[prop] = val
+				cpMap[prop] = types.StringValue(val)
 			}
 		}
 	}
 
-	return hrProperties, nil
+	var customProperties basetypes.MapValue
+	customProperties, diag = basetypes.NewMapValue(types.StringType, cpMap)
+	if diag.HasError() {
+		return hrProperties
+	}
+	hrProperties.customProperties = customProperties
+
+	return hrProperties
 }

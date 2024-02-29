@@ -2,119 +2,168 @@ package provider
 
 import (
 	"context"
-	"log"
-	"strconv"
+	"fmt"
 	"strings"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/umich-vci/gobam"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-func dataSourceIP4Address() *schema.Resource {
-	return &schema.Resource{
-		Description: "Data source to access the attributes of an IPv4 address.",
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ datasource.DataSource = &IP4AddressDataSource{}
 
-		ReadContext: dataSourceIP4AddressRead,
+func NewIP4AddressDataSource() datasource.DataSource {
+	return &IP4AddressDataSource{}
+}
 
-		Schema: map[string]*schema.Schema{
-			"address": {
-				Description: "The IPv4 address to get data for.",
-				Type:        schema.TypeString,
-				Required:    true,
+// IP4AddressDataSource defines the data source implementation.
+type IP4AddressDataSource struct {
+	client *loginClient
+}
+
+// IP4AddressDataSourceModel describes the data source data model.
+type IP4AddressDataSourceModel struct {
+	ID               types.Int64  `tfsdk:"id"`
+	Address          types.String `tfsdk:"address"`
+	ContainerID      types.Int64  `tfsdk:"container_id"`
+	CustomProperties types.Map    `tfsdk:"custom_properties"`
+	MACAddress       types.String `tfsdk:"mac_address"`
+	Name             types.String `tfsdk:"name"`
+	Properties       types.String `tfsdk:"properties"`
+	State            types.String `tfsdk:"state"`
+	Type             types.String `tfsdk:"type"`
+}
+
+func (d *IP4AddressDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_ip4_address"
+}
+
+func (d *IP4AddressDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		// This description is used by the documentation generator and the language server.
+		MarkdownDescription: "Data source to access the attributes of an IPv4 address.",
+
+		Attributes: map[string]schema.Attribute{
+			"id": schema.Int64Attribute{
+				MarkdownDescription: "IP4 Address identifier",
+				Computed:            true,
 			},
-			"container_id": {
-				Description: "The object ID of the container that has the specified `address`.  This can be a Configuration, IPv4 Block, IPv4 Network, or DHCP range.",
-				Type:        schema.TypeString,
-				Required:    true,
+			"address": schema.StringAttribute{
+				MarkdownDescription: "The IPv4 address to get data for.",
+				Required:            true,
 			},
-			"custom_properties": {
-				Description: "A map of all custom properties associated with the IPv4 address.",
-				Type:        schema.TypeMap,
-				Computed:    true,
-				Elem: &schema.Schema{
-					Type: schema.TypeString,
-				},
+			"container_id": schema.Int64Attribute{
+				MarkdownDescription: "The object ID of the container that has the specified `address`.  This can be a Configuration, IPv4 Block, IPv4 Network, or DHCP range.",
+				Required:            true,
 			},
-			"mac_address": {
-				Description: "The MAC address associated with the IPv4 address.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"custom_properties": schema.MapAttribute{
+				MarkdownDescription: "A map of all custom properties associated with the IPv4 address.",
+				Computed:            true,
+				ElementType:         types.StringType,
 			},
-			"name": {
-				Description: "The name assigned to the IPv4 address.  This is not related to DNS.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"mac_address": schema.StringAttribute{
+				MarkdownDescription: "The MAC address associated with the IPv4 address.",
+				Computed:            true,
 			},
-			"properties": {
-				Description: "The properties of the IPv4 address as returned by the API (pipe delimited).",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"name": schema.StringAttribute{
+				MarkdownDescription: "The name assigned to the IPv4 address.  This is not related to DNS.",
+				Computed:            true,
 			},
-			"state": {
-				Description: "The state of the IPv4 address.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"properties": schema.StringAttribute{
+				MarkdownDescription: "The properties of the IPv4 address as returned by the API (pipe delimited).",
+				Computed:            true,
 			},
-			"type": {
-				Description: "The type of the resource.",
-				Type:        schema.TypeString,
-				Computed:    true,
+			"state": schema.StringAttribute{
+				MarkdownDescription: "The state of the IPv4 address.",
+				Computed:            true,
+			},
+			"type": schema.StringAttribute{
+				MarkdownDescription: "The type of the resource.",
+				Computed:            true,
 			},
 		},
 	}
 }
 
-func dataSourceIP4AddressRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	mutex.Lock()
-	client := meta.(*apiClient).Client
-	client.Login(meta.(*apiClient).Username, meta.(*apiClient).Password)
-
-	containerID, err := strconv.ParseInt(d.Get("container_id").(string), 10, 64)
-	if err = gobam.LogoutClientIfError(client, err, "Unable to convert container_id from string to int64"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
-	}
-	address := d.Get("address").(string)
-
-	resp, err := client.GetIP4Address(containerID, address)
-	if err = gobam.LogoutClientIfError(client, err, "Failed to get IP4 Address"); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+func (d *IP4AddressDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
 	}
 
-	d.SetId(strconv.FormatInt(*resp.Id, 10))
-	d.Set("name", resp.Name)
-	d.Set("properties", resp.Properties)
-	d.Set("type", resp.Type)
+	client, ok := req.ProviderData.(*loginClient)
 
-	addressProperties := parseIP4AddressProperties(*resp.Properties)
-	d.Set("address", addressProperties.address)
-	d.Set("state", addressProperties.state)
-	d.Set("mac_address", addressProperties.macAddress)
-	d.Set("custom_properties", addressProperties.customProperties)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Data Source Configure Type",
+			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
 
-	// logout client
-	if err := client.Logout(); err != nil {
-		mutex.Unlock()
-		return diag.FromErr(err)
+		return
 	}
-	log.Printf("[INFO] BlueCat Logout was successful")
-	mutex.Unlock()
 
-	return nil
+	d.client = client
+}
+
+func (d *IP4AddressDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data IP4AddressDataSourceModel
+
+	// Read Terraform configuration data into the model
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	client, diag := clientLogin(ctx, d.client, mutex)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
+		return
+	}
+
+	containerID := data.ContainerID.ValueInt64()
+	address := data.Address.ValueString()
+
+	ip4Address, err := client.GetIP4Address(containerID, address)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to get IP4 Address", err.Error())
+		return
+	}
+
+	data.ID = types.Int64PointerValue(ip4Address.Id)
+	data.Name = types.StringPointerValue(ip4Address.Name)
+	data.Properties = types.StringPointerValue(ip4Address.Properties)
+	data.Type = types.StringPointerValue(ip4Address.Type)
+
+	addressProperties, err := parseIP4AddressProperties(*ip4Address.Properties)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Error parsing the host record properties", err.Error())
+	}
+	data.Address = addressProperties.address
+	data.State = addressProperties.state
+	data.MACAddress = addressProperties.macAddress
+	data.CustomProperties = addressProperties.customProperties
+
+	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+
+	// Save data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 type ip4AddressProperties struct {
-	address          string
-	state            string
-	macAddress       string
-	customProperties map[string]string
+	address          types.String
+	state            types.String
+	macAddress       types.String
+	customProperties types.Map
 }
 
-func parseIP4AddressProperties(properties string) ip4AddressProperties {
+func parseIP4AddressProperties(properties string) (ip4AddressProperties, error) {
 	var ip4Properties ip4AddressProperties
-	ip4Properties.customProperties = make(map[string]string)
+	cpMap := make(map[string]attr.Value)
 
 	props := strings.Split(properties, "|")
 	for x := range props {
@@ -124,16 +173,21 @@ func parseIP4AddressProperties(properties string) ip4AddressProperties {
 
 			switch prop {
 			case "address":
-				ip4Properties.address = val
+				ip4Properties.address = types.StringValue(val)
 			case "state":
-				ip4Properties.state = val
+				ip4Properties.state = types.StringValue(val)
 			case "macAddress":
-				ip4Properties.macAddress = val
+				ip4Properties.macAddress = types.StringValue(val)
 			default:
-				ip4Properties.customProperties[prop] = val
+				cpMap[prop] = types.StringValue(val)
 			}
 		}
 	}
 
-	return ip4Properties
+	customProperties, diag := types.MapValue(types.StringType, cpMap)
+	if diag.HasError() {
+		return ip4Properties, fmt.Errorf("error creating custom properties map")
+	}
+	ip4Properties.customProperties = customProperties
+	return ip4Properties, nil
 }
