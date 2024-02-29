@@ -1,3 +1,10 @@
+## 0.4.0 (February 29, 2024)
+
+IMPROVEMENTS:
+
+* Reworked code to use terraform-plugin-framework instead of terraform-plugin-sdk/v2
+* Simplified how we handle logouts
+
 ## 0.3.1 (October 15, 2021)
 
 BUG FIXES:
