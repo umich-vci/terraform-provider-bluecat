@@ -22,7 +22,7 @@ Data source to access the attributes of an IPv4 network from a hint based search
 
 ### Read-Only
 
-- `addresses_free` (String) The number of addresses unallocated/free on the network.
+- `addresses_free` (Number) The number of addresses unallocated/free on the network.
 - `addresses_in_use` (Number) The number of addresses allocated/in use on the network.
 - `allow_duplicate_host` (String) Duplicate host names check.
 - `cidr` (String) The CIDR address of the IPv4 network.
