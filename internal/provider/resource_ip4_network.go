@@ -248,7 +248,7 @@ func (r *IP4NetworkResource) Create(ctx context.Context, req resource.CreateRequ
 		Type:       &otype,
 	}
 
-	client.Update(&setName)
+	err = client.Update(&setName)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
@@ -302,7 +302,7 @@ func (r *IP4NetworkResource) Read(ctx context.Context, req resource.ReadRequest,
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
 			"Failed to create IP4 Network",
-			err.Error(),
+			"ID returned was 0",
 		)
 
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
