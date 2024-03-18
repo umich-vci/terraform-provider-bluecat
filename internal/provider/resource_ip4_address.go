@@ -217,9 +217,8 @@ func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	if *entity.Id == 0 {
-		data.ID = types.Int64Null()
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+		resp.State.RemoveResource(ctx)
 		return
 	}
 

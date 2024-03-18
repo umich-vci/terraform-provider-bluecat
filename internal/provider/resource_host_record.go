@@ -231,8 +231,8 @@ func (r *HostRecordResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	if *entity.Id == 0 {
-		data.ID = types.Int64Null()
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
