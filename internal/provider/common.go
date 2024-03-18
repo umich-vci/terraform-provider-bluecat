@@ -228,3 +228,94 @@ func boolToEnableDisable(b *bool) string {
 	}
 	return s
 }
+
+// IP4AddressModel describes the data model the built-in properties for an IP4Address object.
+type IP4AddressModel struct {
+	// These are exposed via the entity properties field for objects of type IP4Network
+	Address               types.String
+	State                 types.String
+	MACAddress            types.String
+	RouterPortInfo        types.String
+	SwitchPortInfo        types.String
+	VLANInfo              types.String
+	LeaseTime             types.String
+	ExpiryTime            types.String
+	ParameterRequestList  types.String
+	VendorClassIdentifier types.String
+	LocationCode          types.String
+	LocationInherited     types.Bool
+
+	// these are user defined fields that are not built-in
+	UserDefinedFields types.Map
+}
+
+func flattenIP4AddressProperties(e *gobam.APIEntity) (*IP4AddressModel, diag.Diagnostics) {
+	var d diag.Diagnostics
+
+	if e == nil {
+		d.AddError("invalid input to flattenIP4Network", "entity passed was nil")
+		return nil, d
+	}
+	if e.Type == nil {
+		d.AddError("invalid input to flattenIP4Network", "type of entity passed was nil")
+		return nil, d
+	} else if *e.Type != "IP4Address" {
+		d.AddError("invalid input to flattenIP4Address", fmt.Sprintf("type of entity passed was %s", *e.Type))
+		return nil, d
+	}
+
+	i := &IP4AddressModel{}
+	udfMap := make(map[string]attr.Value)
+
+	if e.Properties != nil {
+		props := strings.Split(*e.Properties, "|")
+		for x := range props {
+			if len(props[x]) > 0 {
+				prop := strings.Split(props[x], "=")[0]
+				val := strings.Split(props[x], "=")[1]
+
+				switch prop {
+				case "address":
+					i.Address = types.StringValue(val)
+				case "state":
+					i.State = types.StringValue(val)
+				case "macAddress":
+					i.MACAddress = types.StringValue(val)
+				case "routerPortInfo":
+					i.RouterPortInfo = types.StringValue(val)
+				case "switchPortInfo":
+					i.SwitchPortInfo = types.StringValue(val)
+				case "vlanInfo":
+					i.VLANInfo = types.StringValue(val)
+				case "leaseTime":
+					i.LeaseTime = types.StringValue(val)
+				case "expiryTime":
+					i.ExpiryTime = types.StringValue(val)
+				case "parameterRequestList":
+					i.ParameterRequestList = types.StringValue(val)
+				case "vendorClassIdentifier":
+					i.VendorClassIdentifier = types.StringValue(val)
+				case "locationCode":
+					i.LocationCode = types.StringValue(val)
+				case "locationInherited":
+					b, err := strconv.ParseBool(val)
+					if err != nil {
+						d.AddError("error parsing locationInherited to bool", err.Error())
+						break
+					}
+					i.LocationInherited = types.BoolValue(b)
+				default:
+					udfMap[prop] = types.StringValue(val)
+				}
+			}
+		}
+	}
+
+	var userDefinedFields basetypes.MapValue
+	userDefinedFields, udfDiag := basetypes.NewMapValue(types.StringType, udfMap)
+	if udfDiag.HasError() {
+		d.Append(udfDiag...)
+	}
+	i.UserDefinedFields = userDefinedFields
+	return i, d
+}
