@@ -3,7 +3,9 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -14,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -35,27 +38,38 @@ type IP4NetworkResource struct {
 
 // IP4NetworkResourceModel describes the resource data model.
 type IP4NetworkResourceModel struct {
-	ID                        types.Int64  `tfsdk:"id"`
-	Name                      types.String `tfsdk:"name"`
-	ParentID                  types.Int64  `tfsdk:"parent_id"`
-	Size                      types.Int64  `tfsdk:"size"`
-	IsLargerAllowed           types.Bool   `tfsdk:"is_larger_allowed"`
-	TraversalMethod           types.String `tfsdk:"traversal_method"`
-	AddressesInUse            types.Int64  `tfsdk:"addresses_in_use"`
-	AddressesFree             types.Int64  `tfsdk:"addresses_free"`
-	AllowDuplicateHost        types.String `tfsdk:"allow_duplicate_host"`
+	// These are exposed for a generic entity object in bluecat
+	ID         types.Int64  `tfsdk:"id"`
+	Name       types.String `tfsdk:"name"`
+	Type       types.String `tfsdk:"type"`
+	Properties types.String `tfsdk:"properties"`
+
+	// These are exposed via the entity properties field for objects of type IP4Network
 	CIDR                      types.String `tfsdk:"cidr"`
-	CustomProperties          types.Map    `tfsdk:"custom_properties"`
-	DefaultView               types.Int64  `tfsdk:"default_view"`
+	Template                  types.Int64  `tfsdk:"template"`
 	Gateway                   types.String `tfsdk:"gateway"`
+	DefaultDomains            types.Set    `tfsdk:"default_domains"`
+	DefaultView               types.Int64  `tfsdk:"default_view"`
+	DNSRestrictions           types.Set    `tfsdk:"dns_restrictions"`
+	AllowDuplicateHost        types.Bool   `tfsdk:"allow_duplicate_host"`
+	PingBeforeAssign          types.Bool   `tfsdk:"ping_before_assign"`
 	InheritAllowDuplicateHost types.Bool   `tfsdk:"inherit_allow_duplicate_host"`
+	InheritPingBeforeAssign   types.Bool   `tfsdk:"inherit_ping_before_assign"`
+	InheritDNSRestrictions    types.Bool   `tfsdk:"inherit_dns_restrictions"`
 	InheritDefaultDomains     types.Bool   `tfsdk:"inherit_default_domains"`
 	InheritDefaultView        types.Bool   `tfsdk:"inherit_default_view"`
-	InheritDNSRestrictions    types.Bool   `tfsdk:"inherit_dns_restrictions"`
-	InheritPingBeforeAssign   types.Bool   `tfsdk:"inherit_ping_before_assign"`
-	PingBeforeAssign          types.String `tfsdk:"ping_before_assign"`
-	Properties                types.String `tfsdk:"properties"`
-	Type                      types.String `tfsdk:"type"`
+	LocationCode              types.String `tfsdk:"location_code"`
+	LocationInherited         types.Bool   `tfsdk:"location_inherited"`
+	SharedNetwork             types.String `tfsdk:"shared_network"`
+
+	// these are user defined fields that are not built-in
+	UserDefinedFields types.Map `tfsdk:"user_defined_fields"`
+
+	// These fields are only used for creation
+	IsLargerAllowed types.Bool   `tfsdk:"is_larger_allowed"`
+	ParentID        types.Int64  `tfsdk:"parent_id"`
+	Size            types.Int64  `tfsdk:"size"`
+	TraversalMethod types.String `tfsdk:"traversal_method"`
 }
 
 func (r *IP4NetworkResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -68,6 +82,7 @@ func (r *IP4NetworkResource) Schema(ctx context.Context, req resource.SchemaRequ
 		MarkdownDescription: "Resource to create an IPv4 network.",
 
 		Attributes: map[string]schema.Attribute{
+			// These are exposed for Entity objects via the API
 			"id": schema.Int64Attribute{
 				MarkdownDescription: "IPv4 Network identifier.",
 				Computed:            true,
@@ -77,7 +92,25 @@ func (r *IP4NetworkResource) Schema(ctx context.Context, req resource.SchemaRequ
 			},
 			"name": schema.StringAttribute{
 				MarkdownDescription: "The display name of the IPv4 network.",
-				Required:            true,
+				Optional:            true,
+			},
+			"type": schema.StringAttribute{
+				MarkdownDescription: "The type of the resource.",
+				Computed:            true,
+			},
+			"properties": schema.StringAttribute{
+				MarkdownDescription: "The properties of the resource as returned by the API (pipe delimited).",
+				Computed:            true,
+			},
+			// These fields are only used for creation and are not exposed via the API entity
+			"is_larger_allowed": schema.BoolAttribute{
+				MarkdownDescription: "(Optional) Is it ok to return a network that is larger than the size specified?",
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(false),
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
 			},
 			"parent_id": schema.Int64Attribute{
 				MarkdownDescription: "The object ID of the parent object that will contain the new IPv4 network. If this argument is changed, then the resource will be recreated.",
@@ -93,15 +126,6 @@ func (r *IP4NetworkResource) Schema(ctx context.Context, req resource.SchemaRequ
 					int64planmodifier.RequiresReplace(),
 				},
 			},
-			"is_larger_allowed": schema.BoolAttribute{
-				MarkdownDescription: "(Optional) Is it ok to return a network that is larger than the size specified?",
-				Optional:            true,
-				Computed:            true,
-				Default:             booldefault.StaticBool(false),
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.RequiresReplace(),
-				},
-			},
 			"traversal_method": schema.StringAttribute{
 				MarkdownDescription: "The traversal method used to find the range to allocate the network. Must be one of \"NO_TRAVERSAL\", \"DEPTH_FIRST\", or \"BREADTH_FIRST\".",
 				Optional:            true,
@@ -110,67 +134,111 @@ func (r *IP4NetworkResource) Schema(ctx context.Context, req resource.SchemaRequ
 				Validators: []validator.String{
 					stringvalidator.OneOf("NO_TRAVERSAL", "DEPTH_FIRST", "BREADTH_FIRST"),
 				},
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
-			"addresses_in_use": schema.Int64Attribute{
-				MarkdownDescription: "The number of addresses allocated/in use on the network.",
-				Computed:            true,
-			},
-			"addresses_free": schema.Int64Attribute{
-				MarkdownDescription: "The number of addresses unallocated/free on the network.",
-				Computed:            true,
-			},
-			"allow_duplicate_host": schema.StringAttribute{
-				MarkdownDescription: "Duplicate host names check.",
-				Computed:            true,
-			},
+
+			// These are exposed via the API properties field for objects of type IP4Network
 			"cidr": schema.StringAttribute{
 				MarkdownDescription: "The CIDR address of the IPv4 network.",
 				Computed:            true,
 			},
-			"custom_properties": schema.MapAttribute{
-				MarkdownDescription: "A map of all custom properties associated with the IPv4 network.",
-				Computed:            true,
-				ElementType:         types.StringType,
-			},
-			"default_view": schema.Int64Attribute{
-				MarkdownDescription: "The object id of the default DNS View for the network.",
+			"template": schema.Int64Attribute{
+				MarkdownDescription: "The ID of the linked template",
 				Computed:            true,
 			},
 			"gateway": schema.StringAttribute{
 				MarkdownDescription: "The gateway of the IPv4 network.",
 				Computed:            true,
+				Optional:            true,
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(regexp.MustCompile(`^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$`), "Gateway must be a valid IPv4 address"),
+				},
+			},
+			"default_domains": schema.SetAttribute{
+				MarkdownDescription: "The object ids of the default DNS domains for the network.",
+				Computed:            true,
+				Optional:            true,
+				ElementType:         types.Int64Type,
+				Default:             nil,
+			},
+			"default_view": schema.Int64Attribute{
+				MarkdownDescription: "The object id of the default DNS View for the network.",
+				Computed:            true,
+				Optional:            true,
+				Default:             nil,
+			},
+			"dns_restrictions": schema.SetAttribute{
+				MarkdownDescription: "The object ids of the DNS restrictions for the network.",
+				Computed:            true,
+				Optional:            true,
+				ElementType:         types.Int64Type,
+				Default:             nil,
+			},
+			"allow_duplicate_host": schema.BoolAttribute{
+				MarkdownDescription: "Duplicate host names check.",
+				Computed:            true,
+				Optional:            true,
+				Default:             nil,
+			},
+			"ping_before_assign": schema.BoolAttribute{
+				MarkdownDescription: "The network pings an address before assignment.",
+				Computed:            true,
+				Optional:            true,
+				Default:             nil,
 			},
 			"inherit_allow_duplicate_host": schema.BoolAttribute{
 				MarkdownDescription: "Duplicate host names check is inherited.",
 				Computed:            true,
-			},
-			"inherit_default_domains": schema.BoolAttribute{
-				MarkdownDescription: "Default domains are inherited.",
-				Computed:            true,
-			},
-			"inherit_default_view": schema.BoolAttribute{
-				MarkdownDescription: "The default DNS Viewis inherited.",
-				Computed:            true,
-			},
-			"inherit_dns_restrictions": schema.BoolAttribute{
-				MarkdownDescription: "DNS restrictions are inherited.",
-				Computed:            true,
+				Optional:            true,
+				Default:             booldefault.StaticBool(true),
 			},
 			"inherit_ping_before_assign": schema.BoolAttribute{
 				MarkdownDescription: "The network pings an address before assignment is inherited.",
 				Computed:            true,
+				Optional:            true,
+				Default:             booldefault.StaticBool(true),
 			},
-			"ping_before_assign": schema.StringAttribute{
-				MarkdownDescription: "The network pings an address before assignment.",
+			"inherit_dns_restrictions": schema.BoolAttribute{
+				MarkdownDescription: "DNS restrictions are inherited.",
+				Computed:            true,
+				Optional:            true,
+				Default:             booldefault.StaticBool(true),
+			},
+			"inherit_default_domains": schema.BoolAttribute{
+				MarkdownDescription: "Default domains are inherited.",
+				Computed:            true,
+				Optional:            true,
+				Default:             booldefault.StaticBool(true),
+			},
+			"inherit_default_view": schema.BoolAttribute{
+				MarkdownDescription: "The default DNS View is inherited.",
+				Computed:            true,
+				Optional:            true,
+				Default:             booldefault.StaticBool(true),
+			},
+			"location_code": schema.StringAttribute{
+				MarkdownDescription: "The location code of the network.",
+				Computed:            true,
+				Optional:            true,
+				Default:             nil,
+				Validators:          []validator.String{
+					// The code is case-sensitive and must be in uppercase letters. The country code and child location code should be alphanumeric strings.
+				},
+			},
+			"location_inherited": schema.BoolAttribute{
+				MarkdownDescription: "The location is inherited.",
 				Computed:            true,
 			},
-			"properties": schema.StringAttribute{
-				MarkdownDescription: "The properties of the resource as returned by the API (pipe delimited).",
+			"shared_network": schema.StringAttribute{
+				MarkdownDescription: "The name of the shared network tag associated with the IP4 Network.",
 				Computed:            true,
 			},
-			"type": schema.StringAttribute{
-				MarkdownDescription: "The type of the resource.",
+			"user_defined_fields": schema.MapAttribute{
+				MarkdownDescription: "A map of all user-definied fields associated with the IP4 Network.",
 				Computed:            true,
+				ElementType:         types.StringType,
 			},
 		},
 	}
@@ -236,27 +304,121 @@ func (r *IP4NetworkResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	data.ID = types.Int64PointerValue(network.Id)
-	name := data.Name.ValueString()
-	id := *network.Id
+	data.Properties = types.StringPointerValue(network.Properties)
+	data.Type = types.StringPointerValue(network.Type)
+
+	// we have an ID at this point so save the state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+
 	properties = ""
-	otype := "IP4Network"
+
+	if !data.Gateway.IsUnknown() {
+		properties = properties + "gateway=" + data.Gateway.ValueString() + "|"
+	}
+
+	if !data.DefaultDomains.IsUnknown() {
+		var defaultDomains []string
+		data.DefaultDomains.ElementsAs(ctx, &defaultDomains, false)
+		properties = properties + "defaultDomains=" + strings.Join(defaultDomains, ",") + "|"
+	}
+
+	if !data.DefaultView.IsUnknown() {
+		properties = properties + "defaultView=" + strconv.FormatInt(data.DefaultView.ValueInt64(), 10) + "|"
+	}
+
+	if !data.DNSRestrictions.IsUnknown() {
+		var dnsRestrictions []string
+		data.DNSRestrictions.ElementsAs(ctx, &dnsRestrictions, false)
+		properties = properties + "dnsRestrictions=" + strings.Join(dnsRestrictions, ",") + "|"
+	}
+
+	if !data.AllowDuplicateHost.IsUnknown() {
+		properties = properties + "allowDuplicateHost=" + boolToEnableDisable(data.AllowDuplicateHost.ValueBoolPointer()) + "|"
+	}
+
+	if !data.PingBeforeAssign.IsUnknown() {
+		properties = properties + "pingBeforeAssign=" + boolToEnableDisable(data.PingBeforeAssign.ValueBoolPointer()) + "|"
+	}
+
+	if !data.InheritAllowDuplicateHost.IsUnknown() {
+		properties = properties + "inheritAllowDuplicateHost=" + strconv.FormatBool(data.InheritAllowDuplicateHost.ValueBool()) + "|"
+	}
+
+	if !data.InheritPingBeforeAssign.IsUnknown() {
+		properties = properties + "inheritPingBeforeAssign=" + strconv.FormatBool(data.InheritPingBeforeAssign.ValueBool()) + "|"
+	}
+
+	if !data.InheritDNSRestrictions.IsUnknown() {
+		properties = properties + "inheritDNSRestrictions=" + strconv.FormatBool(data.InheritDNSRestrictions.ValueBool()) + "|"
+	}
+
+	if !data.InheritDefaultDomains.IsUnknown() {
+		properties = properties + "inheritDefaultDomains=" + strconv.FormatBool(data.InheritDefaultDomains.ValueBool()) + "|"
+	}
+
+	if !data.InheritDefaultView.IsUnknown() {
+		properties = properties + "inheritDefaultView=" + strconv.FormatBool(data.InheritDefaultView.ValueBool()) + "|"
+	}
+
+	if !data.LocationCode.IsUnknown() {
+		properties = properties + "locationCode=" + data.LocationCode.ValueString() + "|"
+	}
 
 	setName := gobam.APIEntity{
-		Id:         &id,
-		Name:       &name,
+		Id:         data.ID.ValueInt64Pointer(),
+		Name:       data.Name.ValueStringPointer(),
 		Properties: &properties,
-		Type:       &otype,
+		Type:       data.Type.ValueStringPointer(),
 	}
 
 	err = client.Update(&setName)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
-			"Failed to update created IP4 Network with name",
+			"Failed to update created IP4 Network",
+			err.Error(),
+		)
+
+		return
+	}
+
+	entity, err := client.GetEntityById(data.ID.ValueInt64())
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError(
+			"Failed to get IP4 Network by Id",
 			err.Error(),
 		)
 		return
 	}
+
+	networkProperties, diag := flattenIP4NetworkProperties(entity)
+	if diag.HasError() {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.Append(diag...)
+		return
+	}
+
+	data.Name = types.StringPointerValue(entity.Name)
+	data.Properties = types.StringPointerValue(entity.Properties)
+	data.Type = types.StringPointerValue(entity.Type)
+	data.CIDR = networkProperties.CIDR
+	data.Template = networkProperties.Template
+	data.Gateway = networkProperties.Gateway
+	data.DefaultDomains = networkProperties.DefaultDomains
+	data.DefaultView = networkProperties.DefaultView
+	data.DNSRestrictions = networkProperties.DNSRestrictions
+	data.AllowDuplicateHost = networkProperties.AllowDuplicateHost
+	data.PingBeforeAssign = networkProperties.PingBeforeAssign
+	data.InheritAllowDuplicateHost = networkProperties.InheritAllowDuplicateHost
+	data.InheritPingBeforeAssign = networkProperties.InheritPingBeforeAssign
+	data.InheritDNSRestrictions = networkProperties.InheritDNSRestrictions
+	data.InheritDefaultDomains = networkProperties.InheritDefaultDomains
+	data.InheritDefaultView = networkProperties.InheritDefaultView
+	data.LocationCode = networkProperties.LocationCode
+	data.LocationInherited = networkProperties.LocationInherited
+	data.SharedNetwork = networkProperties.SharedNetwork
+	data.UserDefinedFields = networkProperties.UserDefinedFields
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
@@ -314,37 +476,30 @@ func (r *IP4NetworkResource) Read(ctx context.Context, req resource.ReadRequest,
 	data.Properties = types.StringPointerValue(entity.Properties)
 	data.Type = types.StringPointerValue(entity.Type)
 
-	networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
+	networkProperties, diag := flattenIP4NetworkProperties(entity)
 	if diag.HasError() {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.Append(diag...)
 		return
 	}
 
-	data.CIDR = networkProperties.cidr
-	data.AllowDuplicateHost = networkProperties.allowDuplicateHost
-	data.InheritAllowDuplicateHost = networkProperties.inheritAllowDuplicateHost
-	data.InheritPingBeforeAssign = networkProperties.inheritPingBeforeAssign
-	data.PingBeforeAssign = networkProperties.pingBeforeAssign
-	data.Gateway = networkProperties.gateway
-	data.InheritDefaultDomains = networkProperties.inheritDefaultDomains
-	data.DefaultView = networkProperties.defaultView
-	data.InheritDefaultView = networkProperties.inheritDefaultView
-	data.InheritDNSRestrictions = networkProperties.inheritDNSRestrictions
-	data.CustomProperties = networkProperties.customProperties
-
-	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Error calculating network usage",
-			err.Error(),
-		)
-		return
-	}
-
-	data.AddressesInUse = types.Int64Value(addressesInUse)
-	data.AddressesFree = types.Int64Value(addressesFree)
+	data.CIDR = networkProperties.CIDR
+	data.Template = networkProperties.Template
+	data.Gateway = networkProperties.Gateway
+	data.DefaultDomains = networkProperties.DefaultDomains
+	data.DefaultView = networkProperties.DefaultView
+	data.DNSRestrictions = networkProperties.DNSRestrictions
+	data.AllowDuplicateHost = networkProperties.AllowDuplicateHost
+	data.PingBeforeAssign = networkProperties.PingBeforeAssign
+	data.InheritAllowDuplicateHost = networkProperties.InheritAllowDuplicateHost
+	data.InheritPingBeforeAssign = networkProperties.InheritPingBeforeAssign
+	data.InheritDNSRestrictions = networkProperties.InheritDNSRestrictions
+	data.InheritDefaultDomains = networkProperties.InheritDefaultDomains
+	data.InheritDefaultView = networkProperties.InheritDefaultView
+	data.LocationCode = networkProperties.LocationCode
+	data.LocationInherited = networkProperties.LocationInherited
+	data.SharedNetwork = networkProperties.SharedNetwork
+	data.UserDefinedFields = networkProperties.UserDefinedFields
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
@@ -353,10 +508,12 @@ func (r *IP4NetworkResource) Read(ctx context.Context, req resource.ReadRequest,
 }
 
 func (r *IP4NetworkResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data *IP4NetworkResourceModel
+	var data, state *IP4NetworkResourceModel
 
 	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 
 	if resp.Diagnostics.HasError() {
 		return
@@ -369,17 +526,77 @@ func (r *IP4NetworkResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	id := data.ID.ValueInt64()
-	name := data.Name.ValueString()
 	properties := ""
-	otype := "IP4Network"
+
+	if !data.Gateway.IsUnknown() && !data.Gateway.Equal(state.Gateway) {
+		properties = properties + fmt.Sprintf("gateway=%s|", data.Gateway.ValueString())
+	}
+
+	if !data.DefaultDomains.IsUnknown() && !data.DefaultDomains.Equal(state.DefaultDomains) {
+		var domains []string
+		data.DefaultDomains.ElementsAs(ctx, &domains, false)
+		if domains != nil {
+			properties = properties + fmt.Sprintf("defaultDomains=%s|", strings.Join(domains, ","))
+		}
+	}
+
+	if !data.DefaultView.IsUnknown() && !data.DefaultView.Equal(state.DefaultView) {
+
+		properties = properties + fmt.Sprintf("defaultView=%s|", strconv.FormatInt(data.DefaultView.ValueInt64(), 10))
+
+	}
+
+	if !data.DNSRestrictions.IsUnknown() && !data.DNSRestrictions.Equal(state.DNSRestrictions) {
+		var dns []string
+		data.DNSRestrictions.ElementsAs(ctx, &dns, false)
+		if dns != nil {
+			properties = properties + fmt.Sprintf("dnsRestrictions=%s|", dns)
+		}
+
+	}
+
+	if !data.AllowDuplicateHost.IsUnknown() && !data.AllowDuplicateHost.Equal(state.AllowDuplicateHost) {
+		properties = properties + fmt.Sprintf("allowDuplicateHost=%s|", boolToEnableDisable(data.AllowDuplicateHost.ValueBoolPointer()))
+
+	}
+
+	if !data.PingBeforeAssign.IsUnknown() && !data.PingBeforeAssign.Equal(state.PingBeforeAssign) {
+		properties = properties + fmt.Sprintf("pingBeforeAssign=%s|", boolToEnableDisable(data.PingBeforeAssign.ValueBoolPointer()))
+	}
+
+	if !data.InheritAllowDuplicateHost.Equal(state.InheritAllowDuplicateHost) {
+		properties = properties + fmt.Sprintf("inheritAllowDuplicateHost=%s|", strconv.FormatBool(data.InheritAllowDuplicateHost.ValueBool()))
+	}
+
+	if !data.InheritPingBeforeAssign.Equal(state.InheritPingBeforeAssign) {
+		properties = properties + fmt.Sprintf("inheritPingBeforeAssign=%s|", strconv.FormatBool(data.InheritPingBeforeAssign.ValueBool()))
+	}
+
+	if !data.InheritDNSRestrictions.Equal(state.InheritDNSRestrictions) {
+		properties = properties + fmt.Sprintf("inheritDNSRestrictions=%s|", strconv.FormatBool(data.InheritDNSRestrictions.ValueBool()))
+	}
+
+	if !data.InheritDefaultDomains.Equal(state.InheritDefaultDomains) {
+		properties = properties + fmt.Sprintf("inheritDefaultDomains=%s|", strconv.FormatBool(data.InheritDefaultDomains.ValueBool()))
+
+	}
+
+	if !data.InheritDefaultView.Equal(state.InheritDefaultView) {
+		properties = properties + fmt.Sprintf("inheritDefaultView=%s|", strconv.FormatBool(data.InheritDefaultView.ValueBool()))
+	}
+
+	if !data.LocationCode.IsUnknown() && !data.LocationCode.Equal(state.LocationCode) {
+		properties = properties + fmt.Sprintf("locationCode=%s|", data.LocationCode.ValueString())
+	}
 
 	update := gobam.APIEntity{
-		Id:         &id,
-		Name:       &name,
+		Id:         state.ID.ValueInt64Pointer(),
+		Name:       data.Name.ValueStringPointer(),
 		Properties: &properties,
-		Type:       &otype,
+		Type:       state.Type.ValueStringPointer(),
 	}
+
+	tflog.Debug(ctx, fmt.Sprintf("Attempting to update IP4Network with properties: %s", properties))
 
 	err := client.Update(&update)
 	if err != nil {
@@ -390,6 +607,45 @@ func (r *IP4NetworkResource) Update(ctx context.Context, req resource.UpdateRequ
 		)
 		return
 	}
+
+	entity, err := client.GetEntityById(data.ID.ValueInt64())
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError(
+			"Failed to get IP4 Network by Id",
+			err.Error(),
+		)
+		return
+	}
+
+	data.Name = types.StringPointerValue(entity.Name)
+	data.Properties = types.StringPointerValue(entity.Properties)
+	data.Type = types.StringPointerValue(entity.Type)
+
+	networkProperties, diag := flattenIP4NetworkProperties(entity)
+	if diag.HasError() {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.Append(diag...)
+		return
+	}
+
+	data.CIDR = networkProperties.CIDR
+	data.Template = networkProperties.Template
+	data.Gateway = networkProperties.Gateway
+	data.DefaultDomains = networkProperties.DefaultDomains
+	data.DefaultView = networkProperties.DefaultView
+	data.DNSRestrictions = networkProperties.DNSRestrictions
+	data.AllowDuplicateHost = networkProperties.AllowDuplicateHost
+	data.PingBeforeAssign = networkProperties.PingBeforeAssign
+	data.InheritAllowDuplicateHost = networkProperties.InheritAllowDuplicateHost
+	data.InheritPingBeforeAssign = networkProperties.InheritPingBeforeAssign
+	data.InheritDNSRestrictions = networkProperties.InheritDNSRestrictions
+	data.InheritDefaultDomains = networkProperties.InheritDefaultDomains
+	data.InheritDefaultView = networkProperties.InheritDefaultView
+	data.LocationCode = networkProperties.LocationCode
+	data.LocationInherited = networkProperties.LocationInherited
+	data.SharedNetwork = networkProperties.SharedNetwork
+	data.UserDefinedFields = networkProperties.UserDefinedFields
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
@@ -446,4 +702,104 @@ func (r *IP4NetworkResource) Delete(ctx context.Context, req resource.DeleteRequ
 
 func (r *IP4NetworkResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func (r IP4NetworkResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data IP4NetworkResourceModel
+
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// if inherit_allow_duplicate_host is true, allow_duplicate_host must be unset
+	if data.InheritAllowDuplicateHost.ValueBool() && !data.AllowDuplicateHost.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("allow_duplicate_host"),
+			"Attribute Conflict",
+			"allow_duplicate_host cannot be configured if inherit_allow_duplicate_host is true.",
+		)
+	}
+
+	// if inherit_allow_duplicate_host is false, allow_duplicate_host must be set
+	if !data.InheritAllowDuplicateHost.ValueBool() && data.AllowDuplicateHost.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("allow_duplicate_host"),
+			"Attribute Conflict",
+			"allow_duplicate_host must be configured if inherit_allow_duplicate_host is false.",
+		)
+	}
+
+	// if inherit_dns_restrictions is true, dns_restrictions must be unset
+	if data.InheritDNSRestrictions.ValueBool() && !data.DNSRestrictions.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("dns_restrictions"),
+			"Attribute Conflict",
+			"dns_restrictions cannot be configured if inherit_dns_restrictions is true.",
+		)
+	}
+
+	// if inherit_dns_restrictions is false, dns_restrictions must be set
+	if !data.InheritDNSRestrictions.ValueBool() && data.DNSRestrictions.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("dns_restrictions"),
+			"Attribute Conflict",
+			"allow_duplicate_host must be configured if inherit_allow_duplicate_host is false.",
+		)
+	}
+
+	// if inherit_default_domains is true, default_domains must be unset
+	if data.InheritDefaultDomains.ValueBool() && !data.DefaultDomains.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("default_domains"),
+			"Attribute Conflict",
+			"default_domains cannot be configured if inherit_default_domains is true.",
+		)
+	}
+
+	// if inherit_default_domains is false, default_domains must be set
+	if !data.InheritDefaultDomains.ValueBool() && data.DefaultDomains.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("default_domains"),
+			"Attribute Conflict",
+			"default_domains must be configured if inherit_default_domains is false.",
+		)
+	}
+
+	// if inherit_default_view is true, default_view must be unset
+	if data.InheritDefaultView.ValueBool() && !data.DefaultView.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("default_view"),
+			"Attribute Conflict",
+			"default_view cannot be configured if inherit_default_view is true.",
+		)
+	}
+
+	// if inherit_default_view is false, default_view must be set
+	if !data.InheritDefaultView.ValueBool() && data.DefaultView.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("default_view"),
+			"Attribute Conflict",
+			"default_view must be configured if inherit_default_view is false.",
+		)
+	}
+
+	// if inherit_ping_before_assign is true, ping_before_assign must be unset
+	if data.InheritPingBeforeAssign.ValueBool() && !data.PingBeforeAssign.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("ping_before_assign"),
+			"Attribute Conflict",
+			"ping_before_assign cannot be configured if inherit_ping_before_assign is true.",
+		)
+	}
+
+	// if inherit_ping_before_assign is false, ping_before_assign must be set
+	if !data.InheritPingBeforeAssign.ValueBool() && data.PingBeforeAssign.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("ping_before_assign"),
+			"Attribute Conflict",
+			"ping_before_assign must be configured if inherit_ping_before_assign is false.",
+		)
+	}
 }
