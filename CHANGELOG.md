@@ -1,3 +1,15 @@
+## 0.4.1 (March 19, 2024)
+
+BREAKING CHANGES:
+* The schema on several resources has been changed, but now fields exposed
+  track what is documented for the Legacy API.
+* There were breaking changes in 0.4.0 as well, but they were not documented or as consistent.
+
+IMPROVEMENTS:
+* All fields on network, address, and host_record resource that are configurable
+  via the API should work now.
+* Updated dependencies
+
 ## 0.4.0 (February 29, 2024)
 
 IMPROVEMENTS:

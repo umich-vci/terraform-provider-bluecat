@@ -33,7 +33,6 @@ output "bluecat_host_addresses" {
 
 - `address_ids` (Set of Number) A set of all address ids associated with the host record.
 - `addresses` (Set of String) A set of all addresses associated with the host record.
-- `custom_properties` (Map of String) A map of all custom properties associated with the host record.
 - `id` (Number) Entity identifier
 - `name` (String) The short name of the host record.
 - `parent_id` (Number) The ID of the parent of the host record.
@@ -42,3 +41,4 @@ output "bluecat_host_addresses" {
 - `reverse_record` (Boolean) A boolean that represents if the host record should set reverse records.
 - `ttl` (Number) The TTL of the host record.
 - `type` (String) The type of the resource.
+- `user_defined_fields` (Map of String) A map of all custom properties associated with the host record.

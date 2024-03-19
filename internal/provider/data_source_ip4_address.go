@@ -3,9 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -25,15 +23,31 @@ type IP4AddressDataSource struct {
 
 // IP4AddressDataSourceModel describes the data source data model.
 type IP4AddressDataSourceModel struct {
-	ID               types.Int64  `tfsdk:"id"`
-	Address          types.String `tfsdk:"address"`
-	ContainerID      types.Int64  `tfsdk:"container_id"`
-	CustomProperties types.Map    `tfsdk:"custom_properties"`
-	MACAddress       types.String `tfsdk:"mac_address"`
-	Name             types.String `tfsdk:"name"`
-	Properties       types.String `tfsdk:"properties"`
-	State            types.String `tfsdk:"state"`
-	Type             types.String `tfsdk:"type"`
+	// These are exposed for a generic entity object in bluecat
+	ID         types.Int64  `tfsdk:"id"`
+	Name       types.String `tfsdk:"name"`
+	Type       types.String `tfsdk:"type"`
+	Properties types.String `tfsdk:"properties"`
+
+	// This is used to help find the IP4Address
+	ContainerID types.Int64 `tfsdk:"container_id"`
+
+	// These are exposed via the entity properties field for objects of type IP4Address
+	Address               types.String `tfsdk:"address"`
+	State                 types.String `tfsdk:"state"`
+	MACAddress            types.String `tfsdk:"mac_address"`
+	RouterPortInfo        types.String `tfsdk:"router_port_info"`
+	SwitchPortInfo        types.String `tfsdk:"switch_port_info"`
+	VLANInfo              types.String `tfsdk:"vlan_info"`
+	LeaseTime             types.String `tfsdk:"lease_time"`
+	ExpiryTime            types.String `tfsdk:"expiry_time"`
+	ParameterRequestList  types.String `tfsdk:"parameter_request_list"`
+	VendorClassIdentifier types.String `tfsdk:"vendor_class_identifier"`
+	LocationCode          types.String `tfsdk:"location_code"`
+	LocationInherited     types.Bool   `tfsdk:"location_inherited"`
+
+	// these are user defined fields that are not built-in
+	UserDefinedFields types.Map `tfsdk:"user_defined_fields"`
 }
 
 func (d *IP4AddressDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -138,56 +152,28 @@ func (d *IP4AddressDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.Properties = types.StringPointerValue(ip4Address.Properties)
 	data.Type = types.StringPointerValue(ip4Address.Type)
 
-	addressProperties, err := parseIP4AddressProperties(*ip4Address.Properties)
-	if err != nil {
+	addressProperties, diag := flattenIP4AddressProperties(ip4Address)
+	if diag.HasError() {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Error parsing the host record properties", err.Error())
+		resp.Diagnostics.Append(diag...)
+		return
 	}
-	data.Address = addressProperties.address
-	data.State = addressProperties.state
-	data.MACAddress = addressProperties.macAddress
-	data.CustomProperties = addressProperties.customProperties
+	data.Address = addressProperties.Address
+	data.State = addressProperties.State
+	data.MACAddress = addressProperties.MACAddress
+	data.RouterPortInfo = addressProperties.RouterPortInfo
+	data.SwitchPortInfo = addressProperties.SwitchPortInfo
+	data.VLANInfo = addressProperties.VLANInfo
+	data.LeaseTime = addressProperties.LeaseTime
+	data.ExpiryTime = addressProperties.ExpiryTime
+	data.ParameterRequestList = addressProperties.ParameterRequestList
+	data.VendorClassIdentifier = addressProperties.VendorClassIdentifier
+	data.LocationCode = addressProperties.LocationCode
+	data.LocationInherited = addressProperties.LocationInherited
+	data.UserDefinedFields = addressProperties.UserDefinedFields
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-}
-
-type ip4AddressProperties struct {
-	address          types.String
-	state            types.String
-	macAddress       types.String
-	customProperties types.Map
-}
-
-func parseIP4AddressProperties(properties string) (ip4AddressProperties, error) {
-	var ip4Properties ip4AddressProperties
-	cpMap := make(map[string]attr.Value)
-
-	props := strings.Split(properties, "|")
-	for x := range props {
-		if len(props[x]) > 0 {
-			prop := strings.Split(props[x], "=")[0]
-			val := strings.Split(props[x], "=")[1]
-
-			switch prop {
-			case "address":
-				ip4Properties.address = types.StringValue(val)
-			case "state":
-				ip4Properties.state = types.StringValue(val)
-			case "macAddress":
-				ip4Properties.macAddress = types.StringValue(val)
-			default:
-				cpMap[prop] = types.StringValue(val)
-			}
-		}
-	}
-
-	customProperties, diag := types.MapValue(types.StringType, cpMap)
-	if diag.HasError() {
-		return ip4Properties, fmt.Errorf("error creating custom properties map")
-	}
-	ip4Properties.customProperties = customProperties
-	return ip4Properties, nil
 }

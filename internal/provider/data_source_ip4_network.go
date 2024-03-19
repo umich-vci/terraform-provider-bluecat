@@ -24,30 +24,36 @@ type IP4NetworkDataSource struct {
 
 // IP4NetworkDataSourceModel describes the data source data model.
 type IP4NetworkDataSourceModel struct {
-	ID                        types.Int64  `tfsdk:"id"`
-	ContainerID               types.Int64  `tfsdk:"container_id"`
-	Hint                      types.String `tfsdk:"hint"`
-	Type                      types.String `tfsdk:"type"`
-	AddressesFree             types.Int64  `tfsdk:"addresses_free"`
-	AddressesInUse            types.Int64  `tfsdk:"addresses_in_use"`
-	AllowDuplicateHost        types.String `tfsdk:"allow_duplicate_host"`
+	// These are exposed for a generic entity object in bluecat
+	ID         types.Int64  `tfsdk:"id"`
+	Name       types.String `tfsdk:"name"`
+	Type       types.String `tfsdk:"type"`
+	Properties types.String `tfsdk:"properties"`
+
+	// These are exposed via the entity properties field for objects of type IP4Network
 	CIDR                      types.String `tfsdk:"cidr"`
-	CustomProperties          types.Map    `tfsdk:"custom_properties"`
+	Template                  types.Int64  `tfsdk:"template"`
+	Gateway                   types.String `tfsdk:"gateway"`
 	DefaultDomains            types.Set    `tfsdk:"default_domains"`
 	DefaultView               types.Int64  `tfsdk:"default_view"`
 	DNSRestrictions           types.Set    `tfsdk:"dns_restrictions"`
-	Gateway                   types.String `tfsdk:"gateway"`
+	AllowDuplicateHost        types.Bool   `tfsdk:"allow_duplicate_host"`
+	PingBeforeAssign          types.Bool   `tfsdk:"ping_before_assign"`
 	InheritAllowDuplicateHost types.Bool   `tfsdk:"inherit_allow_duplicate_host"`
+	InheritPingBeforeAssign   types.Bool   `tfsdk:"inherit_ping_before_assign"`
+	InheritDNSRestrictions    types.Bool   `tfsdk:"inherit_dns_restrictions"`
 	InheritDefaultDomains     types.Bool   `tfsdk:"inherit_default_domains"`
 	InheritDefaultView        types.Bool   `tfsdk:"inherit_default_view"`
-	InheritDNSRestrictions    types.Bool   `tfsdk:"inherit_dns_restrictions"`
-	InheritPingBeforeAssign   types.Bool   `tfsdk:"inherit_ping_before_assign"`
 	LocationCode              types.String `tfsdk:"location_code"`
 	LocationInherited         types.Bool   `tfsdk:"location_inherited"`
-	Name                      types.String `tfsdk:"name"`
-	PingBeforeAssign          types.String `tfsdk:"ping_before_assign"`
-	Properties                types.String `tfsdk:"properties"`
-	Template                  types.Int64  `tfsdk:"template"`
+	SharedNetwork             types.String `tfsdk:"shared_network"`
+
+	// these are user defined fields that are not built-in
+	UserDefinedFields types.Map `tfsdk:"user_defined_fields"`
+
+	// these exist only for the data source to find the network
+	ContainerID types.Int64  `tfsdk:"container_id"`
+	Hint        types.String `tfsdk:"hint"`
 }
 
 func (d *IP4NetworkDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -60,45 +66,44 @@ func (d *IP4NetworkDataSource) Schema(ctx context.Context, req datasource.Schema
 		MarkdownDescription: "Data source to access the attributes of an IPv4 network from a hint based search.",
 
 		Attributes: map[string]schema.Attribute{
-			"id": schema.Int64Attribute{
-				MarkdownDescription: "Example identifier",
-				Computed:            true,
+			"container_id": schema.Int64Attribute{
+				MarkdownDescription: "The object ID of a container that contains the specified IPv4 network.",
+				Required:            true,
 			},
 			"hint": schema.StringAttribute{
 				MarkdownDescription: "Hint to find the IP4Network",
 				Required:            true,
 			},
-			"container_id": schema.Int64Attribute{
-				MarkdownDescription: "The object ID of a container that contains the specified IPv4 network.",
-				Required:            true,
+			"id": schema.Int64Attribute{
+				MarkdownDescription: "The ID assigned to the IP4Network.",
+				Computed:            true,
+			},
+			"name": schema.StringAttribute{
+				MarkdownDescription: "The name assigned to the IP4Network.",
+				Computed:            true,
+			},
+			"properties": schema.StringAttribute{
+				MarkdownDescription: "The properties of the IP4Network (pipe delimited).",
+				Computed:            true,
 			},
 			"type": schema.StringAttribute{
-				MarkdownDescription: "The type of the IP4Network",
-				Computed:            true,
-			},
-			"addresses_free": schema.Int64Attribute{
-				MarkdownDescription: "The number of addresses unallocated/free on the network.",
-				Computed:            true,
-			},
-			"addresses_in_use": schema.Int64Attribute{
-				MarkdownDescription: "The number of addresses allocated/in use on the network.",
-				Computed:            true,
-			},
-			"allow_duplicate_host": schema.StringAttribute{
-				MarkdownDescription: "Duplicate host names check.",
+				MarkdownDescription: "The type of the entity.",
 				Computed:            true,
 			},
 			"cidr": schema.StringAttribute{
-				MarkdownDescription: "The CIDR address of the IPv4 network.",
+				MarkdownDescription: "The CIDR address of the IP4Network.",
 				Computed:            true,
 			},
-			"custom_properties": schema.MapAttribute{
-				MarkdownDescription: "A map of all custom properties associated with the IPv4 network.",
+			"template": schema.Int64Attribute{
+				MarkdownDescription: "The ID of the linked template",
 				Computed:            true,
-				ElementType:         types.StringType,
+			},
+			"gateway": schema.StringAttribute{
+				MarkdownDescription: "The gateway of the IP4Network.",
+				Computed:            true,
 			},
 			"default_domains": schema.SetAttribute{
-				MarkdownDescription: "TODO",
+				MarkdownDescription: "The object ids of the default DNS domains for the network.",
 				Computed:            true,
 				ElementType:         types.Int64Type,
 			},
@@ -107,16 +112,28 @@ func (d *IP4NetworkDataSource) Schema(ctx context.Context, req datasource.Schema
 				Computed:            true,
 			},
 			"dns_restrictions": schema.SetAttribute{
-				MarkdownDescription: "TODO",
+				MarkdownDescription: "The object ids of the DNS restrictions for the network.",
 				Computed:            true,
 				ElementType:         types.Int64Type,
 			},
-			"gateway": schema.StringAttribute{
-				MarkdownDescription: "The gateway of the IPv4 network.",
+			"allow_duplicate_host": schema.BoolAttribute{
+				MarkdownDescription: "Duplicate host names check.",
+				Computed:            true,
+			},
+			"ping_before_assign": schema.BoolAttribute{
+				MarkdownDescription: "The network pings an address before assignment.",
 				Computed:            true,
 			},
 			"inherit_allow_duplicate_host": schema.BoolAttribute{
 				MarkdownDescription: "Duplicate host names check is inherited.",
+				Computed:            true,
+			},
+			"inherit_ping_before_assign": schema.BoolAttribute{
+				MarkdownDescription: "The network pings an address before assignment is inherited.",
+				Computed:            true,
+			},
+			"inherit_dns_restrictions": schema.BoolAttribute{
+				MarkdownDescription: "DNS restrictions are inherited.",
 				Computed:            true,
 			},
 			"inherit_default_domains": schema.BoolAttribute{
@@ -127,37 +144,22 @@ func (d *IP4NetworkDataSource) Schema(ctx context.Context, req datasource.Schema
 				MarkdownDescription: "The default DNS View is inherited.",
 				Computed:            true,
 			},
-			"inherit_dns_restrictions": schema.BoolAttribute{
-				MarkdownDescription: "DNS restrictions are inherited.",
-				Computed:            true,
-			},
-			"inherit_ping_before_assign": schema.BoolAttribute{
-				MarkdownDescription: "The network pings an address before assignment is inherited.",
-				Computed:            true,
-			},
 			"location_code": schema.StringAttribute{
-				MarkdownDescription: "TODO",
+				MarkdownDescription: "The location code of the network.",
 				Computed:            true,
 			},
 			"location_inherited": schema.BoolAttribute{
-				MarkdownDescription: "TODO",
+				MarkdownDescription: "The location is inherited.",
 				Computed:            true,
 			},
-			"name": schema.StringAttribute{
-				MarkdownDescription: "The name assigned the resource.",
+			"shared_network": schema.StringAttribute{
+				MarkdownDescription: "The name of the shared network tag associated with the IP4 Network.",
 				Computed:            true,
 			},
-			"ping_before_assign": schema.StringAttribute{
-				MarkdownDescription: "The network pings an address before assignment.",
+			"user_defined_fields": schema.MapAttribute{
+				MarkdownDescription: "A map of all user-definied fields associated with the entity.",
 				Computed:            true,
-			},
-			"properties": schema.StringAttribute{
-				MarkdownDescription: "The properties of the resource as returned by the API (pipe delimited).",
-				Computed:            true,
-			},
-			"template": schema.Int64Attribute{
-				MarkdownDescription: "TODO",
-				Computed:            true,
+				ElementType:         types.StringType,
 			},
 		},
 	}
@@ -236,39 +238,30 @@ func (d *IP4NetworkDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.Properties = types.StringPointerValue(entity.Properties)
 	data.Type = types.StringPointerValue(entity.Type)
 
-	networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
+	networkProperties, diag := flattenIP4NetworkProperties(entity)
 	if diag.HasError() {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.Append(diag...)
 		return
 	}
 
-	data.CIDR = networkProperties.cidr
-	data.Template = networkProperties.template
-
-	data.Gateway = networkProperties.gateway
-	data.DefaultDomains = networkProperties.defaultDomains
-	data.DefaultView = networkProperties.defaultView
-	data.DNSRestrictions = networkProperties.dnsRestrictions
-	data.AllowDuplicateHost = networkProperties.allowDuplicateHost
-	data.PingBeforeAssign = networkProperties.pingBeforeAssign
-	data.InheritAllowDuplicateHost = networkProperties.inheritAllowDuplicateHost
-	data.InheritPingBeforeAssign = networkProperties.inheritPingBeforeAssign
-	data.InheritDNSRestrictions = networkProperties.inheritDNSRestrictions
-	data.InheritDefaultDomains = networkProperties.inheritDefaultDomains
-	data.InheritDefaultView = networkProperties.inheritDefaultView
-	data.LocationCode = networkProperties.locationCode
-	data.LocationInherited = networkProperties.locationInherited
-	data.CustomProperties = networkProperties.customProperties
-
-	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Error calculating network usage", err.Error())
-		return
-	}
-	data.AddressesInUse = types.Int64Value(addressesInUse)
-	data.AddressesFree = types.Int64Value(addressesFree)
+	data.CIDR = networkProperties.CIDR
+	data.Template = networkProperties.Template
+	data.Gateway = networkProperties.Gateway
+	data.DefaultDomains = networkProperties.DefaultDomains
+	data.DefaultView = networkProperties.DefaultView
+	data.DNSRestrictions = networkProperties.DNSRestrictions
+	data.AllowDuplicateHost = networkProperties.AllowDuplicateHost
+	data.PingBeforeAssign = networkProperties.PingBeforeAssign
+	data.InheritAllowDuplicateHost = networkProperties.InheritAllowDuplicateHost
+	data.InheritPingBeforeAssign = networkProperties.InheritPingBeforeAssign
+	data.InheritDNSRestrictions = networkProperties.InheritDNSRestrictions
+	data.InheritDefaultDomains = networkProperties.InheritDefaultDomains
+	data.InheritDefaultView = networkProperties.InheritDefaultView
+	data.LocationCode = networkProperties.LocationCode
+	data.LocationInherited = networkProperties.LocationInherited
+	data.SharedNetwork = networkProperties.SharedNetwork
+	data.UserDefinedFields = networkProperties.UserDefinedFields
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 

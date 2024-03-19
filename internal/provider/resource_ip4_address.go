@@ -3,19 +3,23 @@ package provider
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/umich-vci/gobam"
+	"golang.org/x/exp/maps"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -31,19 +35,35 @@ type IP4AddressResource struct {
 	client *loginClient
 }
 
-// ExampleResourceModel describes the resource data model.
+// IP4AddressResourceModel describes the resource data model.
 type IP4AddressResourceModel struct {
-	ID               types.Int64  `tfsdk:"id"`
-	ConfigurationID  types.Int64  `tfsdk:"configuration_id"`
-	Name             types.String `tfsdk:"name"`
-	ParentID         types.Int64  `tfsdk:"parent_id"`
-	Action           types.String `tfsdk:"action"`
-	CustomProperties types.Map    `tfsdk:"custom_properties"`
-	MACAddress       types.String `tfsdk:"mac_address"`
-	Address          types.String `tfsdk:"address"`
-	Properties       types.String `tfsdk:"properties"`
-	State            types.String `tfsdk:"state"`
-	Type             types.String `tfsdk:"type"`
+	// These are exposed for a generic entity object in bluecat
+	ID         types.Int64  `tfsdk:"id"`
+	Name       types.String `tfsdk:"name"`
+	Type       types.String `tfsdk:"type"`
+	Properties types.String `tfsdk:"properties"`
+
+	// These are exposed via the entity properties field for objects of type IP4Address
+	Address               types.String `tfsdk:"address"`
+	State                 types.String `tfsdk:"state"`
+	MACAddress            types.String `tfsdk:"mac_address"`
+	RouterPortInfo        types.String `tfsdk:"router_port_info"`
+	SwitchPortInfo        types.String `tfsdk:"switch_port_info"`
+	VLANInfo              types.String `tfsdk:"vlan_info"`
+	LeaseTime             types.String `tfsdk:"lease_time"`
+	ExpiryTime            types.String `tfsdk:"expiry_time"`
+	ParameterRequestList  types.String `tfsdk:"parameter_request_list"`
+	VendorClassIdentifier types.String `tfsdk:"vendor_class_identifier"`
+	LocationCode          types.String `tfsdk:"location_code"`
+	LocationInherited     types.Bool   `tfsdk:"location_inherited"`
+
+	// these are user defined fields that are not built-in
+	UserDefinedFields types.Map `tfsdk:"user_defined_fields"`
+
+	// These fields are only used for creation
+	Action          types.String `tfsdk:"action"`
+	ConfigurationID types.Int64  `tfsdk:"configuration_id"`
+	ParentID        types.Int64  `tfsdk:"parent_id"`
 }
 
 func (r *IP4AddressResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -56,31 +76,27 @@ func (r *IP4AddressResource) Schema(ctx context.Context, req resource.SchemaRequ
 		MarkdownDescription: "Resource to reserve an IPv4 address.",
 
 		Attributes: map[string]schema.Attribute{
+			// These are exposed for Entity objects via the API
 			"id": schema.Int64Attribute{
+				MarkdownDescription: "IPv4 Address identifier.",
 				Computed:            true,
-				MarkdownDescription: "IP4 address identifier",
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
 				},
 			},
-			"configuration_id": schema.Int64Attribute{
-				MarkdownDescription: "The object ID of the Configuration that will hold the new address. If changed, forces a new resource.",
-				Required:            true,
-				PlanModifiers: []planmodifier.Int64{
-					int64planmodifier.RequiresReplace(),
-				},
-			},
 			"name": schema.StringAttribute{
-				MarkdownDescription: "The name assigned to the IPv4 address. This is not related to DNS.",
-				Required:            true,
+				MarkdownDescription: "The display name of the IPv4 address.",
+				Optional:            true,
 			},
-			"parent_id": schema.Int64Attribute{
-				MarkdownDescription: "The object ID of the Configuration, Block, or Network to find the next available IPv4 address in. If changed, forces a new resource.",
-				Required:            true,
-				PlanModifiers: []planmodifier.Int64{
-					int64planmodifier.RequiresReplace(),
-				},
+			"type": schema.StringAttribute{
+				MarkdownDescription: "The type of the resource.",
+				Computed:            true,
 			},
+			"properties": schema.StringAttribute{
+				MarkdownDescription: "The properties of the resource as returned by the API (pipe delimited).",
+				Computed:            true,
+			},
+			// These fields are only used for creation and are not exposed via the API entity
 			"action": schema.StringAttribute{
 				MarkdownDescription: "The action to take on the next available IPv4 address.  Must be one of: \"MAKE_STATIC\", \"MAKE_RESERVED\", or \"MAKE_DHCP_RESERVED\". If changed, forces a new resource.",
 				Optional:            true,
@@ -93,33 +109,80 @@ func (r *IP4AddressResource) Schema(ctx context.Context, req resource.SchemaRequ
 					stringvalidator.OneOf(gobam.IPAssignmentActions...),
 				},
 			},
-			"custom_properties": schema.MapAttribute{
-				MarkdownDescription: "A map of all custom properties associated with the IPv4 address.",
-				Optional:            true,
-				Computed:            true,
-				ElementType:         types.StringType,
+			"configuration_id": schema.Int64Attribute{
+				MarkdownDescription: "The object ID of the Configuration that will hold the new address. If changed, forces a new resource.",
+				Required:            true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.RequiresReplace(),
+				},
 			},
-			"mac_address": schema.StringAttribute{
-				MarkdownDescription: "The MAC address to associate with the IPv4 address.",
-				Optional:            true,
-				Computed:            true,
-				Default:             stringdefault.StaticString(""),
+			"parent_id": schema.Int64Attribute{
+				MarkdownDescription: "The object ID of the Configuration, Block, or Network to find the next available IPv4 address in. If changed, forces a new resource.",
+				Required:            true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.RequiresReplace(),
+				},
 			},
+			// These are exposed via the API properties field for objects of type IP4Address
 			"address": schema.StringAttribute{
 				MarkdownDescription: "The IPv4 address that was allocated.",
-				Computed:            true,
-			},
-			"properties": schema.StringAttribute{
-				MarkdownDescription: "The properties of the IPv4 address as returned by the API (pipe delimited).",
 				Computed:            true,
 			},
 			"state": schema.StringAttribute{
 				MarkdownDescription: "The state of the IPv4 address.",
 				Computed:            true,
 			},
-			"type": schema.StringAttribute{
-				MarkdownDescription: "The type of the resource.",
+			"mac_address": schema.StringAttribute{
+				MarkdownDescription: "The MAC address to associate with the IPv4 address.",
+				Optional:            true,
+			},
+			"router_port_info": schema.StringAttribute{
+				MarkdownDescription: "Connected router port information of the IPv4 address.",
 				Computed:            true,
+			},
+			"switch_port_info": schema.StringAttribute{
+				MarkdownDescription: "Connected switch port information of the IPv4 address.",
+				Computed:            true,
+			},
+			"vlan_info": schema.StringAttribute{
+				MarkdownDescription: "VLAN information of the IPv4 address.",
+				Computed:            true,
+			},
+			"lease_time": schema.StringAttribute{
+				MarkdownDescription: "Time that IPv4 address was leased.",
+				Computed:            true,
+			},
+			"expiry_time": schema.StringAttribute{
+				MarkdownDescription: "Time that IPv4 address lease expires.",
+				Computed:            true,
+			},
+			"parameter_request_list": schema.StringAttribute{
+				MarkdownDescription: "Time that IPv4 address lease expires.",
+				Computed:            true,
+			},
+			"vendor_class_identifier": schema.StringAttribute{
+				MarkdownDescription: "Time that IPv4 address lease expires.",
+				Computed:            true,
+			},
+			"location_code": schema.StringAttribute{
+				MarkdownDescription: "The location code of the address.",
+				Computed:            true,
+				Optional:            true,
+				Default:             nil,
+				Validators:          []validator.String{
+					// The code is case-sensitive and must be in uppercase letters. The country code and child location code should be alphanumeric strings.
+				},
+			},
+			"location_inherited": schema.BoolAttribute{
+				MarkdownDescription: "The location is inherited.",
+				Computed:            true,
+			},
+			"user_defined_fields": schema.MapAttribute{
+				MarkdownDescription: "A map of all user-definied fields associated with the IPv4 address.",
+				Computed:            true,
+				Optional:            true,
+				Default:             mapdefault.StaticValue(basetypes.NewMapValueMust(types.StringType, nil)),
+				ElementType:         types.StringType,
 			},
 		},
 	}
@@ -168,9 +231,15 @@ func (r *IP4AddressResource) Create(ctx context.Context, req resource.CreateRequ
 	action := data.Action.ValueString()
 	name := data.Name.ValueString()
 	properties := "name=" + name + "|"
-	customProperties := data.CustomProperties.Elements()
-	for k, v := range customProperties {
-		properties = properties + k + "=" + v.String() + "|"
+
+	if !data.LocationCode.IsUnknown() && !data.LocationCode.IsNull() {
+		properties = properties + fmt.Sprintf("locationCode=%s|", data.LocationCode.ValueString())
+	}
+
+	var udfs map[string]string
+	data.UserDefinedFields.ElementsAs(ctx, &udfs, false)
+	for k, v := range udfs {
+		properties = properties + k + "=" + v + "|"
 	}
 
 	ip, err := client.AssignNextAvailableIP4Address(configID, parentID, macAddress, hostInfo, action, properties)
@@ -182,10 +251,43 @@ func (r *IP4AddressResource) Create(ctx context.Context, req resource.CreateRequ
 
 	data.ID = types.Int64PointerValue(ip.Id)
 
+	entity, err := client.GetEntityById(data.ID.ValueInt64())
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError(
+			"Failed to get IP4 Address by Id after creation",
+			err.Error(),
+		)
+		return
+	}
+
+	data.Name = types.StringPointerValue(entity.Name)
+	data.Properties = types.StringPointerValue(entity.Properties)
+	data.Type = types.StringPointerValue(entity.Type)
+
+	addressProperties, diag := flattenIP4AddressProperties(entity)
+	if diag.HasError() {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.Append(diag...)
+		return
+	}
+
+	data.Address = addressProperties.Address
+	data.State = addressProperties.State
+	data.MACAddress = addressProperties.MACAddress
+	data.RouterPortInfo = addressProperties.RouterPortInfo
+	data.SwitchPortInfo = addressProperties.SwitchPortInfo
+	data.VLANInfo = addressProperties.VLANInfo
+	data.LeaseTime = addressProperties.LeaseTime
+	data.ExpiryTime = addressProperties.ExpiryTime
+	data.ParameterRequestList = addressProperties.ParameterRequestList
+	data.VendorClassIdentifier = addressProperties.VendorClassIdentifier
+	data.LocationCode = addressProperties.LocationCode
+	data.LocationInherited = addressProperties.LocationInherited
+	data.UserDefinedFields = addressProperties.UserDefinedFields
+
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
-	// Write logs using the tflog package
-	// Documentation: https://terraform.io/plugin/log
 	tflog.Trace(ctx, "created a resource")
 
 	// Save data into Terraform state
@@ -208,8 +310,7 @@ func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	id := data.ID.ValueInt64()
-	entity, err := client.GetEntityById(id)
+	entity, err := client.GetEntityById(data.ID.ValueInt64())
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError("Failed to get IP4 Address by Id", err.Error())
@@ -217,9 +318,8 @@ func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	if *entity.Id == 0 {
-		data.ID = types.Int64Null()
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
@@ -227,17 +327,26 @@ func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest,
 	data.Properties = types.StringPointerValue(entity.Properties)
 	data.Type = types.StringPointerValue(entity.Type)
 
-	addressProperties, err := parseIP4AddressProperties(*entity.Properties)
-	if err != nil {
+	addressProperties, diag := flattenIP4AddressProperties(entity)
+	if diag.HasError() {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to parse IP4 Address properties", err.Error())
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 
-	data.Address = addressProperties.address
-	data.State = addressProperties.state
-	data.MACAddress = addressProperties.macAddress
-	data.CustomProperties = addressProperties.customProperties
+	data.Address = addressProperties.Address
+	data.State = addressProperties.State
+	data.MACAddress = addressProperties.MACAddress
+	data.RouterPortInfo = addressProperties.RouterPortInfo
+	data.SwitchPortInfo = addressProperties.SwitchPortInfo
+	data.VLANInfo = addressProperties.VLANInfo
+	data.LeaseTime = addressProperties.LeaseTime
+	data.ExpiryTime = addressProperties.ExpiryTime
+	data.ParameterRequestList = addressProperties.ParameterRequestList
+	data.VendorClassIdentifier = addressProperties.VendorClassIdentifier
+	data.LocationCode = addressProperties.LocationCode
+	data.LocationInherited = addressProperties.LocationInherited
+	data.UserDefinedFields = addressProperties.UserDefinedFields
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
@@ -246,10 +355,11 @@ func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest,
 }
 
 func (r *IP4AddressResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data *IP4AddressResourceModel
+	var data, state *IP4AddressResourceModel
 
 	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 
 	if resp.Diagnostics.HasError() {
 		return
@@ -261,26 +371,40 @@ func (r *IP4AddressResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	id := data.ID.ValueInt64()
-	macAddress := data.MACAddress.ValueString()
-	name := data.Name.ValueString()
-	otype := data.Type.ValueString()
-	properties := "name=" + name + "|"
+	properties := ""
 
-	if macAddress != "" {
-		properties = properties + "macAddress=" + macAddress + "|"
+	if !data.MACAddress.Equal(state.MACAddress) {
+		properties = properties + fmt.Sprintf("macAddress=%s|", data.MACAddress.ValueString())
 	}
 
-	customProperties := data.CustomProperties.Elements()
-	for k, v := range customProperties {
-		properties = properties + k + "=" + v.String() + "|"
+	if !data.LocationCode.Equal(state.LocationCode) {
+		properties = properties + fmt.Sprintf("locationCode=%s|", data.LocationCode.ValueString())
+	}
+
+	if !data.UserDefinedFields.Equal(state.UserDefinedFields) {
+		var udfs, oldudfs map[string]string
+		resp.Diagnostics.Append(data.UserDefinedFields.ElementsAs(ctx, &udfs, false)...)
+		resp.Diagnostics.Append(state.UserDefinedFields.ElementsAs(ctx, &oldudfs, false)...)
+
+		for k, v := range udfs {
+			properties = properties + fmt.Sprintf("%s=%s|", k, v)
+		}
+
+		// set keys that no longer exist to empty string
+		oldkeys := maps.Keys(oldudfs)
+		keys := maps.Keys(udfs)
+		for _, x := range oldkeys {
+			if !slices.Contains(keys, x) {
+				properties = properties + fmt.Sprintf("%s=|", x)
+			}
+		}
 	}
 
 	update := gobam.APIEntity{
-		Id:         &id,
-		Name:       &name,
+		Id:         data.ID.ValueInt64Pointer(),
+		Name:       data.Name.ValueStringPointer(),
 		Properties: &properties,
-		Type:       &otype,
+		Type:       state.Type.ValueStringPointer(),
 	}
 
 	err := client.Update(&update)
@@ -289,6 +413,41 @@ func (r *IP4AddressResource) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError("Failed to update IP4 Address", err.Error())
 		return
 	}
+
+	entity, err := client.GetEntityById(data.ID.ValueInt64())
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError(
+			"Failed to get IP4 Address by Id after creation",
+			err.Error(),
+		)
+		return
+	}
+
+	data.Name = types.StringPointerValue(entity.Name)
+	data.Properties = types.StringPointerValue(entity.Properties)
+	data.Type = types.StringPointerValue(entity.Type)
+
+	addressProperties, diag := flattenIP4AddressProperties(entity)
+	if diag.HasError() {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.Append(diag...)
+		return
+	}
+
+	data.Address = addressProperties.Address
+	data.State = addressProperties.State
+	data.MACAddress = addressProperties.MACAddress
+	data.RouterPortInfo = addressProperties.RouterPortInfo
+	data.SwitchPortInfo = addressProperties.SwitchPortInfo
+	data.VLANInfo = addressProperties.VLANInfo
+	data.LeaseTime = addressProperties.LeaseTime
+	data.ExpiryTime = addressProperties.ExpiryTime
+	data.ParameterRequestList = addressProperties.ParameterRequestList
+	data.VendorClassIdentifier = addressProperties.VendorClassIdentifier
+	data.LocationCode = addressProperties.LocationCode
+	data.LocationInherited = addressProperties.LocationInherited
+	data.UserDefinedFields = addressProperties.UserDefinedFields
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 

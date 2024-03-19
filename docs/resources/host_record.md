@@ -37,14 +37,14 @@ output "bluecat_hostname_fqdn" {
 
 ### Optional
 
-- `comments` (String) Comments to be associated with the host record.
-- `custom_properties` (Map of String) A map of all custom properties associated with the host record.
 - `reverse_record` (Boolean) If a reverse record should be created for addresses.
 - `ttl` (Number) The TTL for the host record.  When set to -1, ignores the TTL.
+- `user_defined_fields` (Map of String) A map of all user-definied fields associated with the Host Record.
 
 ### Read-Only
 
 - `absolute_name` (String) The absolute name (fqdn) of the host record.
-- `id` (String) Host Record identifier
+- `address_ids` (Set of Number) A set of all address ids associated with the host record.
+- `id` (Number) Host Record identifier
 - `properties` (String) The properties of the host record as returned by the API (pipe delimited).
 - `type` (String) The type of the resource.

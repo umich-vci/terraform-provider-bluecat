@@ -29,30 +29,34 @@ output "bluecat_ip4_network_cidr" {
 
 ### Required
 
-- `name` (String) The display name of the IPv4 network.
 - `parent_id` (Number) The object ID of the parent object that will contain the new IPv4 network. If this argument is changed, then the resource will be recreated.
 - `size` (Number) The size of the IPv4 network expressed as a power of 2. For example, 256 would create a /24. If this argument is changed, then the resource will be recreated.
 
 ### Optional
 
+- `allow_duplicate_host` (Boolean) Duplicate host names check.
+- `default_domains` (Set of Number) The object ids of the default DNS domains for the network.
+- `default_view` (Number) The object id of the default DNS View for the network.
+- `dns_restrictions` (Set of Number) The object ids of the DNS restrictions for the network.
+- `gateway` (String) The gateway of the IPv4 network.
+- `inherit_allow_duplicate_host` (Boolean) Duplicate host names check is inherited.
+- `inherit_default_domains` (Boolean) Default domains are inherited.
+- `inherit_default_view` (Boolean) The default DNS View is inherited.
+- `inherit_dns_restrictions` (Boolean) DNS restrictions are inherited.
+- `inherit_ping_before_assign` (Boolean) The network pings an address before assignment is inherited.
 - `is_larger_allowed` (Boolean) (Optional) Is it ok to return a network that is larger than the size specified?
+- `location_code` (String) The location code of the network.
+- `name` (String) The display name of the IPv4 network.
+- `ping_before_assign` (Boolean) The network pings an address before assignment.
 - `traversal_method` (String) The traversal method used to find the range to allocate the network. Must be one of "NO_TRAVERSAL", "DEPTH_FIRST", or "BREADTH_FIRST".
+- `user_defined_fields` (Map of String) A map of all user-definied fields associated with the IP4 Network.
 
 ### Read-Only
 
-- `addresses_free` (Number) The number of addresses unallocated/free on the network.
-- `addresses_in_use` (Number) The number of addresses allocated/in use on the network.
-- `allow_duplicate_host` (String) Duplicate host names check.
 - `cidr` (String) The CIDR address of the IPv4 network.
-- `custom_properties` (Map of String) A map of all custom properties associated with the IPv4 network.
-- `default_view` (Number) The object id of the default DNS View for the network.
-- `gateway` (String) The gateway of the IPv4 network.
 - `id` (Number) IPv4 Network identifier.
-- `inherit_allow_duplicate_host` (Boolean) Duplicate host names check is inherited.
-- `inherit_default_domains` (Boolean) Default domains are inherited.
-- `inherit_default_view` (Boolean) The default DNS Viewis inherited.
-- `inherit_dns_restrictions` (Boolean) DNS restrictions are inherited.
-- `inherit_ping_before_assign` (Boolean) The network pings an address before assignment is inherited.
-- `ping_before_assign` (String) The network pings an address before assignment.
+- `location_inherited` (Boolean) The location is inherited.
 - `properties` (String) The properties of the resource as returned by the API (pipe delimited).
+- `shared_network` (String) The name of the shared network tag associated with the IP4 Network.
+- `template` (Number) The ID of the linked template
 - `type` (String) The type of the resource.
