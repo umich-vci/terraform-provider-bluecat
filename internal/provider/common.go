@@ -319,3 +319,141 @@ func flattenIP4AddressProperties(e *gobam.APIEntity) (*IP4AddressModel, diag.Dia
 	i.UserDefinedFields = userDefinedFields
 	return i, d
 }
+
+// HostRecordModel describes the data model the built-in properties for a Host Record object.
+type HostRecordModel struct {
+	// These are exposed via the entity properties field for objects of type IP4Network
+	TTL           types.Int64
+	AbsoluteName  types.String
+	Addresses     types.Set
+	ReverseRecord types.Bool
+
+	// these are user defined fields that are not built-in
+	UserDefinedFields types.Map
+
+	// these are returned by the API but do not appear in the documentation
+	AddressIDs types.Set
+
+	// these are returned by the API with a hint based search but do not appear in the documentation
+	ParentID   types.Int64
+	ParentType types.String
+}
+
+func flattenHostRecordProperties(e *gobam.APIEntity) (*HostRecordModel, diag.Diagnostics) {
+	var d diag.Diagnostics
+
+	if e == nil {
+		d.AddError("invalid input to flattenHostRecordProperties", "entity passed was nil")
+		return nil, d
+	}
+	if e.Type == nil {
+		d.AddError("invalid input to flattenHostRecordProperties", "type of entity passed was nil")
+		return nil, d
+	} else if *e.Type != "HostRecord" {
+		d.AddError("invalid input to flattenHostRecordProperties", fmt.Sprintf("type of entity passed was %s", *e.Type))
+		return nil, d
+	}
+
+	h := &HostRecordModel{}
+	udfMap := make(map[string]attr.Value)
+
+	addressesFound := false
+	addressIDsFound := false
+	var ttl int64 = -1
+	var addressesSet basetypes.SetValue
+	var addressIDsSet basetypes.SetValue
+
+	if e.Properties != nil {
+		props := strings.Split(*e.Properties, "|")
+		for x := range props {
+			if len(props[x]) > 0 {
+				prop := strings.Split(props[x], "=")[0]
+				val := strings.Split(props[x], "=")[1]
+
+				switch prop {
+				case "ttl":
+					t, err := strconv.ParseInt(val, 10, 64)
+					if err != nil {
+						d.AddError("error parsing ttl to int64", err.Error())
+						break
+					}
+					ttl = t
+				case "absoluteName":
+					h.AbsoluteName = types.StringValue(val)
+				case "addresses":
+					addressesFound = true
+					var aDiag diag.Diagnostics
+					addresses := strings.Split(val, ",")
+					addressesList := []attr.Value{}
+					for x := range addresses {
+						addressesList = append(addressesList, types.StringValue(addresses[x]))
+					}
+
+					addressesSet, aDiag = basetypes.NewSetValue(types.StringType, addressesList)
+					if aDiag.HasError() {
+						d.Append(aDiag...)
+						break
+					}
+				case "addressIds":
+					addressIDsFound = true
+					var aDiag diag.Diagnostics
+					addressIDs := strings.Split(val, ",")
+					addressIDsList := []attr.Value{}
+					for x := range addressIDs {
+						addressID, err := strconv.ParseInt(addressIDs[x], 10, 64)
+						if err != nil {
+							d.AddError("error parsing addressIds to int64", err.Error())
+							break
+						}
+						addressIDsList = append(addressIDsList, types.Int64Value(addressID))
+					}
+					addressIDsSet, aDiag = basetypes.NewSetValue(types.Int64Type, addressIDsList)
+					if aDiag.HasError() {
+						d.Append(aDiag...)
+						break
+					}
+				case "parentId":
+					pid, err := strconv.ParseInt(val, 10, 64)
+					if err != nil {
+						d.AddError("error parsing parentId to int64", err.Error())
+						break
+					}
+					h.ParentID = types.Int64Value(pid)
+				case "parentType":
+					h.ParentType = types.StringValue(val)
+				case "reverseRecord":
+					b, err := strconv.ParseBool(val)
+					if err != nil {
+						d.AddError("error parsing reverseRecord to bool", err.Error())
+						break
+					}
+					h.ReverseRecord = types.BoolValue(b)
+				default:
+					udfMap[prop] = types.StringValue(val)
+				}
+			}
+		}
+	}
+
+	if !addressesFound {
+		addressesSet = basetypes.NewSetNull(types.StringType)
+	}
+	h.Addresses = addressesSet
+
+	if !addressIDsFound {
+		addressIDsSet = basetypes.NewSetNull(types.Int64Type)
+	}
+	h.AddressIDs = addressIDsSet
+
+	h.TTL = types.Int64Value(ttl)
+
+	var userDefinedFields basetypes.MapValue
+	var udfDiag diag.Diagnostics
+	userDefinedFields, udfDiag = basetypes.NewMapValue(types.StringType, udfMap)
+	if udfDiag.HasError() {
+		d.Append(udfDiag...)
+	}
+	h.UserDefinedFields = userDefinedFields
+
+	return h, d
+}
