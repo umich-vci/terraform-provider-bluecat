@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/umich-vci/gobam"
+	"golang.org/x/exp/maps"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -323,12 +325,6 @@ func (r *HostRecordResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	var addresses []string
-	resp.Diagnostics.Append(data.Addresses.ElementsAs(ctx, &addresses, false)...)
-
-	var udfs map[string]string
-	resp.Diagnostics.Append(data.UserDefinedFields.ElementsAs(ctx, udfs, false)...)
-
 	if resp.Diagnostics.HasError() {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.Append(diag...)
@@ -337,9 +333,10 @@ func (r *HostRecordResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	properties := ""
 
-	if !data.Addresses.Equal(state.Addresses) {
-		properties = properties + fmt.Sprintf("addresses=%s|", strings.Join(addresses, ","))
-	}
+	// addresses must always be set
+	var addresses []string
+	resp.Diagnostics.Append(data.Addresses.ElementsAs(ctx, &addresses, false)...)
+	properties = properties + fmt.Sprintf("addresses=%s|", strings.Join(addresses, ","))
 
 	if !data.ReverseRecord.Equal(state.ReverseRecord) {
 		properties = properties + fmt.Sprintf("reverseRecord=%s|", strconv.FormatBool(data.ReverseRecord.ValueBool()))
@@ -349,9 +346,26 @@ func (r *HostRecordResource) Update(ctx context.Context, req resource.UpdateRequ
 		properties = properties + fmt.Sprintf("ttl=%d|", data.TTL.ValueInt64())
 	}
 
-	for k, v := range udfs {
-		properties = properties + fmt.Sprintf("%s=%s|", k, v)
+	if !data.UserDefinedFields.Equal(state.UserDefinedFields) {
+		var udfs, oldudfs map[string]string
+		resp.Diagnostics.Append(data.UserDefinedFields.ElementsAs(ctx, &udfs, false)...)
+		resp.Diagnostics.Append(state.UserDefinedFields.ElementsAs(ctx, &oldudfs, false)...)
+
+		for k, v := range udfs {
+			properties = properties + fmt.Sprintf("%s=%s|", k, v)
+		}
+
+		// set keys that no longer exist to empty string
+		oldkeys := maps.Keys(oldudfs)
+		keys := maps.Keys(udfs)
+		for _, x := range oldkeys {
+			if !slices.Contains(keys, x) {
+				properties = properties + fmt.Sprintf("%s=|", x)
+			}
+		}
 	}
+
+	tflog.Debug(ctx, fmt.Sprintf("Attempting to update HostRecord with properties: %s", properties))
 
 	update := gobam.APIEntity{
 		Id:         data.ID.ValueInt64Pointer(),

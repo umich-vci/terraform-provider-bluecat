@@ -3,19 +3,23 @@ package provider
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/umich-vci/gobam"
+	"golang.org/x/exp/maps"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -177,6 +181,7 @@ func (r *IP4AddressResource) Schema(ctx context.Context, req resource.SchemaRequ
 				MarkdownDescription: "A map of all user-definied fields associated with the IPv4 address.",
 				Computed:            true,
 				Optional:            true,
+				Default:             mapdefault.StaticValue(basetypes.NewMapValueMust(types.StringType, nil)),
 				ElementType:         types.StringType,
 			},
 		},
@@ -377,11 +382,21 @@ func (r *IP4AddressResource) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	if !data.UserDefinedFields.Equal(state.UserDefinedFields) {
-		var udfs map[string]string
+		var udfs, oldudfs map[string]string
 		resp.Diagnostics.Append(data.UserDefinedFields.ElementsAs(ctx, &udfs, false)...)
+		resp.Diagnostics.Append(state.UserDefinedFields.ElementsAs(ctx, &oldudfs, false)...)
 
 		for k, v := range udfs {
 			properties = properties + fmt.Sprintf("%s=%s|", k, v)
+		}
+
+		// set keys that no longer exist to empty string
+		oldkeys := maps.Keys(oldudfs)
+		keys := maps.Keys(udfs)
+		for _, x := range oldkeys {
+			if !slices.Contains(keys, x) {
+				properties = properties + fmt.Sprintf("%s=|", x)
+			}
 		}
 	}
 

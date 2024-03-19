@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -14,13 +15,16 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/umich-vci/gobam"
+	"golang.org/x/exp/maps"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -238,6 +242,8 @@ func (r *IP4NetworkResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"user_defined_fields": schema.MapAttribute{
 				MarkdownDescription: "A map of all user-definied fields associated with the IP4 Network.",
 				Computed:            true,
+				Optional:            true,
+				Default:             mapdefault.StaticValue(basetypes.NewMapValueMust(types.StringType, nil)),
 				ElementType:         types.StringType,
 			},
 		},
@@ -362,6 +368,12 @@ func (r *IP4NetworkResource) Create(ctx context.Context, req resource.CreateRequ
 
 	if !data.LocationCode.IsUnknown() {
 		properties = properties + "locationCode=" + data.LocationCode.ValueString() + "|"
+	}
+
+	var udfs map[string]string
+	data.UserDefinedFields.ElementsAs(ctx, &udfs, false)
+	for k, v := range udfs {
+		properties = properties + k + "=" + v + "|"
 	}
 
 	setName := gobam.APIEntity{
@@ -581,6 +593,25 @@ func (r *IP4NetworkResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	if !data.LocationCode.IsUnknown() && !data.LocationCode.Equal(state.LocationCode) {
 		properties = properties + fmt.Sprintf("locationCode=%s|", data.LocationCode.ValueString())
+	}
+
+	if !data.UserDefinedFields.Equal(state.UserDefinedFields) {
+		var udfs, oldudfs map[string]string
+		resp.Diagnostics.Append(data.UserDefinedFields.ElementsAs(ctx, &udfs, false)...)
+		resp.Diagnostics.Append(state.UserDefinedFields.ElementsAs(ctx, &oldudfs, false)...)
+
+		for k, v := range udfs {
+			properties = properties + fmt.Sprintf("%s=%s|", k, v)
+		}
+
+		// set keys that no longer exist to empty string
+		oldkeys := maps.Keys(oldudfs)
+		keys := maps.Keys(udfs)
+		for _, x := range oldkeys {
+			if !slices.Contains(keys, x) {
+				properties = properties + fmt.Sprintf("%s=|", x)
+			}
+		}
 	}
 
 	update := gobam.APIEntity{
