@@ -6,12 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
@@ -29,18 +26,18 @@ type HostRecordDataSource struct {
 
 // HostRecordDataSourceModel describes the data source data model.
 type HostRecordDataSourceModel struct {
-	ID               types.Int64  `tfsdk:"id"`
-	AbsoluteName     types.String `tfsdk:"absolute_name"`
-	Addresses        types.Set    `tfsdk:"addresses"`
-	AddressIDs       types.Set    `tfsdk:"address_ids"`
-	CustomProperties types.Map    `tfsdk:"custom_properties"`
-	Name             types.String `tfsdk:"name"`
-	ParentID         types.Int64  `tfsdk:"parent_id"`
-	ParentType       types.String `tfsdk:"parent_type"`
-	Properties       types.String `tfsdk:"properties"`
-	ReverseRecord    types.Bool   `tfsdk:"reverse_record"`
-	TTL              types.Int64  `tfsdk:"ttl"`
-	Type             types.String `tfsdk:"type"`
+	ID                types.Int64  `tfsdk:"id"`
+	AbsoluteName      types.String `tfsdk:"absolute_name"`
+	Addresses         types.Set    `tfsdk:"addresses"`
+	AddressIDs        types.Set    `tfsdk:"address_ids"`
+	UserDefinedFields types.Map    `tfsdk:"user_defined_fields"`
+	Name              types.String `tfsdk:"name"`
+	ParentID          types.Int64  `tfsdk:"parent_id"`
+	ParentType        types.String `tfsdk:"parent_type"`
+	Properties        types.String `tfsdk:"properties"`
+	ReverseRecord     types.Bool   `tfsdk:"reverse_record"`
+	TTL               types.Int64  `tfsdk:"ttl"`
+	Type              types.String `tfsdk:"type"`
 }
 
 func (d *HostRecordDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -71,7 +68,7 @@ func (d *HostRecordDataSource) Schema(ctx context.Context, req datasource.Schema
 				Computed:            true,
 				ElementType:         types.Int64Type,
 			},
-			"custom_properties": schema.MapAttribute{
+			"user_defined_fields": schema.MapAttribute{
 				MarkdownDescription: "A map of all custom properties associated with the host record.",
 				Computed:            true,
 				ElementType:         types.StringType,
@@ -201,20 +198,21 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.Properties = types.StringValue(*hostRecords.Item[matchLocation].Properties)
 	data.Type = types.StringValue(*hostRecords.Item[matchLocation].Type)
 
-	hostRecordProperties := parseHostRecordProperties(*hostRecords.Item[matchLocation].Properties, resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	hostRecordProperties, diag := flattenHostRecordProperties(hostRecords.Item[matchLocation])
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		return
 	}
 
-	data.AbsoluteName = hostRecordProperties.absoluteName
-	data.ParentID = hostRecordProperties.parentID
-	data.ParentType = hostRecordProperties.parentType
-	data.ReverseRecord = hostRecordProperties.reverseRecord
-	data.Addresses = hostRecordProperties.addresses
-	data.AddressIDs = hostRecordProperties.addressIDs
-	data.CustomProperties = hostRecordProperties.customProperties
-	data.TTL = hostRecordProperties.ttl
+	data.AbsoluteName = hostRecordProperties.AbsoluteName
+	data.ParentID = hostRecordProperties.ParentID
+	data.ParentType = hostRecordProperties.ParentType
+	data.ReverseRecord = hostRecordProperties.ReverseRecord
+	data.Addresses = hostRecordProperties.Addresses
+	data.AddressIDs = hostRecordProperties.AddressIDs
+	data.UserDefinedFields = hostRecordProperties.UserDefinedFields
+	data.TTL = hostRecordProperties.TTL
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
@@ -224,100 +222,4 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-}
-
-type hostRecordProperties struct {
-	absoluteName     types.String
-	parentID         types.Int64
-	parentType       types.String
-	ttl              types.Int64
-	reverseRecord    types.Bool
-	addresses        types.Set
-	addressIDs       types.Set
-	customProperties types.Map
-}
-
-func parseHostRecordProperties(properties string, diag diag.Diagnostics) hostRecordProperties {
-	var hrProperties hostRecordProperties
-
-	cpMap := make(map[string]attr.Value)
-
-	// if ttl isn't returned as a property it will remain set at -1
-	hrProperties.ttl = types.Int64Value(-1)
-
-	props := strings.Split(properties, "|")
-	for x := range props {
-		if len(props[x]) > 0 {
-			prop := strings.Split(props[x], "=")[0]
-			val := strings.Split(props[x], "=")[1]
-
-			switch prop {
-			case "absoluteName":
-				hrProperties.absoluteName = types.StringValue(val)
-			case "parentId":
-				pID, err := strconv.ParseInt(val, 10, 64)
-				if err != nil {
-					diag.AddError("error parsing parentId to int64", fmt.Sprintf("value of parentId was %s", val))
-					return hrProperties
-				}
-				hrProperties.parentID = types.Int64Value(pID)
-			case "parentType":
-				hrProperties.parentType = types.StringValue(val)
-			case "reverseRecord":
-				b, err := strconv.ParseBool(val)
-				if err != nil {
-					diag.AddError("error parsing reverseRecord to bool", fmt.Sprintf("value of reverseRecord was %s", val))
-					return hrProperties
-				}
-				hrProperties.reverseRecord = types.BoolValue(b)
-			case "addresses":
-				addresses := strings.Split(val, ",")
-				addressList := []attr.Value{}
-				for i := range addresses {
-					addressList = append(addressList, types.StringValue(addresses[i]))
-				}
-				var addressSet basetypes.SetValue
-				addressSet, diag = types.SetValue(types.StringType, addressList)
-				if diag.HasError() {
-					return hrProperties
-				}
-				hrProperties.addresses = addressSet
-			case "addressIds":
-				addressIDs := strings.Split(val, ",")
-				aidList := []attr.Value{}
-				for i := range addressIDs {
-					aID, err := strconv.ParseInt(addressIDs[i], 10, 64)
-					if err != nil {
-						diag.AddError("error parsing addressIds to int64", fmt.Sprintf("value in addressIds was %s", val))
-						return hrProperties
-					}
-					aidList = append(aidList, types.Int64Value(aID))
-				}
-				var aidSet basetypes.SetValue
-				aidSet, diag = basetypes.NewSetValue(types.Int64Type, aidList)
-				if diag.HasError() {
-					return hrProperties
-				}
-				hrProperties.addressIDs = aidSet
-			case "ttl":
-				ttlval, err := strconv.ParseInt(val, 10, 64)
-				if err != nil {
-					diag.AddError("error parsing ttl to int", fmt.Sprintf("value in ttl was %s", val))
-					return hrProperties
-				}
-				hrProperties.ttl = types.Int64Value(ttlval)
-			default:
-				cpMap[prop] = types.StringValue(val)
-			}
-		}
-	}
-
-	var customProperties basetypes.MapValue
-	customProperties, diag = basetypes.NewMapValue(types.StringType, cpMap)
-	if diag.HasError() {
-		return hrProperties
-	}
-	hrProperties.customProperties = customProperties
-
-	return hrProperties
 }
