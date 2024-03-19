@@ -12,10 +12,11 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/umich-vci/gobam"
 )
@@ -33,20 +34,29 @@ type HostRecordResource struct {
 	client *loginClient
 }
 
-// ExampleResourceModel describes the resource data model.
+// HostRecordResourceModel describes the resource data model.
 type HostRecordResourceModel struct {
-	ID               types.Int64  `tfsdk:"id"`
-	Addresses        types.Set    `tfsdk:"addresses"`
-	DNSZone          types.String `tfsdk:"dns_zone"`
-	Name             types.String `tfsdk:"name"`
-	ViewID           types.Int64  `tfsdk:"view_id"`
-	Comments         types.String `tfsdk:"comments"`
-	CustomProperties types.Map    `tfsdk:"custom_properties"`
-	ReverseRecord    types.Bool   `tfsdk:"reverse_record"`
-	TTL              types.Int64  `tfsdk:"ttl"`
-	AbsoluteName     types.String `tfsdk:"absolute_name"`
-	Properties       types.String `tfsdk:"properties"`
-	Type             types.String `tfsdk:"type"`
+	// These are exposed for a generic entity object in bluecat
+	ID         types.Int64  `tfsdk:"id"`
+	Name       types.String `tfsdk:"name"`
+	Type       types.String `tfsdk:"type"`
+	Properties types.String `tfsdk:"properties"`
+
+	// These are exposed via the entity properties field for objects of type IP4Address
+	TTL           types.Int64  `tfsdk:"ttl"`
+	AbsoluteName  types.String `tfsdk:"absolute_name"`
+	Addresses     types.Set    `tfsdk:"addresses"`
+	ReverseRecord types.Bool   `tfsdk:"reverse_record"`
+
+	// this is returned by the API but do not appear in the documentation
+	AddressIDs types.Set `tfsdk:"address_ids"`
+
+	// these are user defined fields that are not built-in
+	UserDefinedFields types.Map `tfsdk:"user_defined_fields"`
+
+	// These fields are only used for creation
+	DNSZone types.String `tfsdk:"dns_zone"`
+	ViewID  types.Int64  `tfsdk:"view_id"`
 }
 
 func (r *HostRecordResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -59,28 +69,33 @@ func (r *HostRecordResource) Schema(ctx context.Context, req resource.SchemaRequ
 		MarkdownDescription: "Resource create a host record.",
 
 		Attributes: map[string]schema.Attribute{
-			"id": schema.StringAttribute{
+			// These are exposed for Entity objects via the API
+			"id": schema.Int64Attribute{
 				Computed:            true,
 				MarkdownDescription: "Host Record identifier",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
 				},
 			},
-			"addresses": schema.SetAttribute{
-				MarkdownDescription: "The address(es) to be associated with the host record.",
+			"name": schema.StringAttribute{
+				MarkdownDescription: "The name of the host record to be created. Combined with `dns_zone` to make the fqdn.",
 				Required:            true,
-				ElementType:         types.StringType,
 			},
+			"type": schema.StringAttribute{
+				MarkdownDescription: "The type of the resource.",
+				Computed:            true,
+			},
+			"properties": schema.StringAttribute{
+				MarkdownDescription: "The properties of the host record as returned by the API (pipe delimited).",
+				Computed:            true,
+			},
+			// These fields are only used for creation and are not exposed via the API entity
 			"dns_zone": schema.StringAttribute{
 				MarkdownDescription: "The DNS zone to create the host record in. Combined with `name` to make the fqdn.  If changed, forces a new resource.",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
-			},
-			"name": schema.StringAttribute{
-				MarkdownDescription: "The name of the host record to be created. Combined with `dns_zone` to make the fqdn.",
-				Required:            true,
 			},
 			"view_id": schema.Int64Attribute{
 				MarkdownDescription: "The object ID of the View that host record should be created in. If changed, forces a new resource.",
@@ -89,17 +104,16 @@ func (r *HostRecordResource) Schema(ctx context.Context, req resource.SchemaRequ
 					int64planmodifier.RequiresReplace(),
 				},
 			},
-			"comments": schema.StringAttribute{
-				MarkdownDescription: "Comments to be associated with the host record.",
-				Optional:            true,
-				Computed:            true,
-				Default:             stringdefault.StaticString(""),
-			},
-			"custom_properties": schema.MapAttribute{
-				MarkdownDescription: "A map of all custom properties associated with the host record.",
-				Optional:            true,
-				Computed:            true,
+			// These are exposed via the API properties field for objects of type Host Record
+			"addresses": schema.SetAttribute{
+				MarkdownDescription: "The address(es) to be associated with the host record.",
+				Required:            true,
 				ElementType:         types.StringType,
+			},
+			"address_ids": schema.SetAttribute{
+				MarkdownDescription: "A set of all address ids associated with the host record.",
+				Computed:            true,
+				ElementType:         types.Int64Type,
 			},
 			"reverse_record": schema.BoolAttribute{
 				MarkdownDescription: "If a reverse record should be created for addresses.",
@@ -117,13 +131,12 @@ func (r *HostRecordResource) Schema(ctx context.Context, req resource.SchemaRequ
 				MarkdownDescription: "The absolute name (fqdn) of the host record.",
 				Computed:            true,
 			},
-			"properties": schema.StringAttribute{
-				MarkdownDescription: "The properties of the host record as returned by the API (pipe delimited).",
+			"user_defined_fields": schema.MapAttribute{
+				MarkdownDescription: "A map of all user-definied fields associated with the Host Record.",
+				Optional:            true,
 				Computed:            true,
-			},
-			"type": schema.StringAttribute{
-				MarkdownDescription: "The type of the resource.",
-				Computed:            true,
+				ElementType:         types.StringType,
+				Default:             mapdefault.StaticValue(basetypes.NewMapValueMust(types.StringType, nil)),
 			},
 		},
 	}
@@ -169,21 +182,26 @@ func (r *HostRecordResource) Create(ctx context.Context, req resource.CreateRequ
 	absoluteName := data.Name.ValueString() + "." + data.DNSZone.ValueString()
 	ttl := data.TTL.ValueInt64()
 
-	addresses := []string{}
-	diag = data.Addresses.ElementsAs(ctx, addresses, false)
+	var addresses []string
+	diag = data.Addresses.ElementsAs(ctx, &addresses, false)
 	if diag.HasError() {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.Append(diag...)
 		return
 	}
 
-	reverseRecord := strconv.FormatBool(data.ReverseRecord.ValueBool())
-	comments := data.Comments.ValueString()
-	properties := "reverseRecord=" + reverseRecord + "|comments=" + comments + "|"
+	properties := ""
+	properties = properties + fmt.Sprintf("reverseRecord=%s|", strconv.FormatBool(data.ReverseRecord.ValueBool()))
 
-	customProperties := data.CustomProperties.Elements()
-	for k, v := range customProperties {
-		properties = properties + k + "=" + v.String() + "|"
+	var udfs map[string]string
+	resp.Diagnostics.Append(data.UserDefinedFields.ElementsAs(ctx, &udfs, false)...)
+	if resp.Diagnostics.HasError() {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.Append(diag...)
+		return
+	}
+	for k, v := range udfs {
+		properties = properties + fmt.Sprintf("%s=%s|", k, v)
 	}
 
 	host, err := client.AddHostRecord(viewID, absoluteName, strings.Join(addresses, ","), ttl, properties)
@@ -194,6 +212,34 @@ func (r *HostRecordResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	data.ID = types.Int64Value(host)
+
+	entity, err := client.GetEntityById(data.ID.ValueInt64())
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError(
+			"Failed to get IP4 Address by Id after creation",
+			err.Error(),
+		)
+		return
+	}
+
+	data.Name = types.StringPointerValue(entity.Name)
+	data.Properties = types.StringPointerValue(entity.Properties)
+	data.Type = types.StringPointerValue(entity.Type)
+
+	hrProperties, diag := flattenHostRecordProperties(entity)
+	if diag.HasError() {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.Append(diag...)
+		return
+	}
+
+	data.AbsoluteName = hrProperties.AbsoluteName
+	data.Addresses = hrProperties.Addresses
+	data.AddressIDs = hrProperties.AddressIDs
+	data.TTL = hrProperties.TTL
+	data.ReverseRecord = hrProperties.ReverseRecord
+	data.UserDefinedFields = hrProperties.UserDefinedFields
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
@@ -240,17 +286,19 @@ func (r *HostRecordResource) Read(ctx context.Context, req resource.ReadRequest,
 	data.Properties = types.StringPointerValue(entity.Properties)
 	data.Type = types.StringPointerValue(entity.Type)
 
-	hostRecordProperties := parseHostRecordProperties(*entity.Properties, resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	hostRecordProperties, diag := flattenHostRecordProperties(entity)
+	if diag.HasError() {
+		resp.Diagnostics.Append(diag...)
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		return
 	}
 
-	data.AbsoluteName = hostRecordProperties.absoluteName
-	data.Addresses = hostRecordProperties.addresses
-	data.CustomProperties = hostRecordProperties.customProperties
-	data.ReverseRecord = hostRecordProperties.reverseRecord
-	data.TTL = hostRecordProperties.ttl
+	data.AbsoluteName = hostRecordProperties.AbsoluteName
+	data.Addresses = hostRecordProperties.Addresses
+	data.AddressIDs = hostRecordProperties.AddressIDs
+	data.ReverseRecord = hostRecordProperties.ReverseRecord
+	data.TTL = hostRecordProperties.TTL
+	data.UserDefinedFields = hostRecordProperties.UserDefinedFields
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
@@ -259,10 +307,11 @@ func (r *HostRecordResource) Read(ctx context.Context, req resource.ReadRequest,
 }
 
 func (r *HostRecordResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data *HostRecordResourceModel
+	var data, state *HostRecordResourceModel
 
 	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 
 	if resp.Diagnostics.HasError() {
 		return
@@ -274,36 +323,41 @@ func (r *HostRecordResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	id := data.ID.ValueInt64()
-	name := data.Name.ValueString()
-	otype := data.Type.ValueString()
-	ttl := strconv.FormatInt(data.TTL.ValueInt64(), 10)
+	var addresses []string
+	resp.Diagnostics.Append(data.Addresses.ElementsAs(ctx, &addresses, false)...)
 
-	addresses := []string{}
-	diag = data.Addresses.ElementsAs(ctx, addresses, false)
-	if diag.HasError() {
+	var udfs map[string]string
+	resp.Diagnostics.Append(data.UserDefinedFields.ElementsAs(ctx, udfs, false)...)
+
+	if resp.Diagnostics.HasError() {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Parsing addresses failed",
-			"",
-		)
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 
-	reverseRecord := strconv.FormatBool(data.ReverseRecord.ValueBool())
-	comments := data.Comments.ValueString()
-	properties := "reverseRecord=" + reverseRecord + "|comments=" + comments + "|ttl=" + ttl + "|addresses=" + strings.Join(addresses, ",") + "|"
+	properties := ""
 
-	customProperties := data.CustomProperties.Elements()
-	for k, v := range customProperties {
-		properties = properties + k + "=" + v.String() + "|"
+	if !data.Addresses.Equal(state.Addresses) {
+		properties = properties + fmt.Sprintf("addresses=%s|", strings.Join(addresses, ","))
+	}
+
+	if !data.ReverseRecord.Equal(state.ReverseRecord) {
+		properties = properties + fmt.Sprintf("reverseRecord=%s|", strconv.FormatBool(data.ReverseRecord.ValueBool()))
+	}
+
+	if !data.TTL.Equal(state.TTL) {
+		properties = properties + fmt.Sprintf("ttl=%d|", data.TTL.ValueInt64())
+	}
+
+	for k, v := range udfs {
+		properties = properties + fmt.Sprintf("%s=%s|", k, v)
 	}
 
 	update := gobam.APIEntity{
-		Id:         &id,
-		Name:       &name,
+		Id:         data.ID.ValueInt64Pointer(),
+		Name:       data.Name.ValueStringPointer(),
 		Properties: &properties,
-		Type:       &otype,
+		Type:       state.Type.ValueStringPointer(),
 	}
 
 	err := client.Update(&update)
@@ -312,6 +366,34 @@ func (r *HostRecordResource) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError("Host Record Update failed", err.Error())
 		return
 	}
+
+	entity, err := client.GetEntityById(data.ID.ValueInt64())
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError(
+			"Failed to get host record by Id after update",
+			err.Error(),
+		)
+		return
+	}
+
+	data.Name = types.StringPointerValue(entity.Name)
+	data.Properties = types.StringPointerValue(entity.Properties)
+	data.Type = types.StringPointerValue(entity.Type)
+
+	hrProperties, diag := flattenHostRecordProperties(entity)
+	if diag.HasError() {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.Append(diag...)
+		return
+	}
+
+	data.AbsoluteName = hrProperties.AbsoluteName
+	data.Addresses = hrProperties.Addresses
+	data.AddressIDs = hrProperties.AddressIDs
+	data.TTL = hrProperties.TTL
+	data.ReverseRecord = hrProperties.ReverseRecord
+	data.UserDefinedFields = hrProperties.UserDefinedFields
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
