@@ -30,19 +30,28 @@ output "allocated_address" {
 ### Required
 
 - `configuration_id` (Number) The object ID of the Configuration that will hold the new address. If changed, forces a new resource.
-- `name` (String) The name assigned to the IPv4 address. This is not related to DNS.
 - `parent_id` (Number) The object ID of the Configuration, Block, or Network to find the next available IPv4 address in. If changed, forces a new resource.
 
 ### Optional
 
 - `action` (String) The action to take on the next available IPv4 address.  Must be one of: "MAKE_STATIC", "MAKE_RESERVED", or "MAKE_DHCP_RESERVED". If changed, forces a new resource.
-- `custom_properties` (Map of String) A map of all custom properties associated with the IPv4 address.
+- `location_code` (String) The location code of the address.
 - `mac_address` (String) The MAC address to associate with the IPv4 address.
+- `name` (String) The display name of the IPv4 address.
+- `user_defined_fields` (Map of String) A map of all user-definied fields associated with the IPv4 address.
 
 ### Read-Only
 
 - `address` (String) The IPv4 address that was allocated.
-- `id` (Number) IP4 address identifier
-- `properties` (String) The properties of the IPv4 address as returned by the API (pipe delimited).
+- `expiry_time` (String) Time that IPv4 address lease expires.
+- `id` (Number) IPv4 Address identifier.
+- `lease_time` (String) Time that IPv4 address was leased.
+- `location_inherited` (Boolean) The location is inherited.
+- `parameter_request_list` (String) Time that IPv4 address lease expires.
+- `properties` (String) The properties of the resource as returned by the API (pipe delimited).
+- `router_port_info` (String) Connected router port information of the IPv4 address.
 - `state` (String) The state of the IPv4 address.
+- `switch_port_info` (String) Connected switch port information of the IPv4 address.
 - `type` (String) The type of the resource.
+- `vendor_class_identifier` (String) Time that IPv4 address lease expires.
+- `vlan_info` (String) VLAN information of the IPv4 address.

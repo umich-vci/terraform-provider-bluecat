@@ -49,6 +49,7 @@ output "bluecat_ip4_network_cidr" {
 - `name` (String) The display name of the IPv4 network.
 - `ping_before_assign` (Boolean) The network pings an address before assignment.
 - `traversal_method` (String) The traversal method used to find the range to allocate the network. Must be one of "NO_TRAVERSAL", "DEPTH_FIRST", or "BREADTH_FIRST".
+- `user_defined_fields` (Map of String) A map of all user-definied fields associated with the IP4 Network.
 
 ### Read-Only
 
@@ -59,4 +60,3 @@ output "bluecat_ip4_network_cidr" {
 - `shared_network` (String) The name of the shared network tag associated with the IP4 Network.
 - `template` (Number) The ID of the linked template
 - `type` (String) The type of the resource.
-- `user_defined_fields` (Map of String) A map of all user-definied fields associated with the IP4 Network.
