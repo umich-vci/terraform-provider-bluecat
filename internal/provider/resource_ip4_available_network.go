@@ -254,7 +254,7 @@ func (r *IP4AvailableNetworkResource) Create(ctx context.Context, req resource.C
 		for k, v := range freeAddressMap {
 			if v > freeCount {
 				freeCount = v
-				result = int64(k)
+				result = k
 			}
 		}
 	}

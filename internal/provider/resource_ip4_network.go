@@ -820,7 +820,7 @@ func (r IP4NetworkResource) ValidateConfig(ctx context.Context, req resource.Val
 	}
 
 	// if inherit_ping_before_assign is false, ping_before_assign must be set
-	if !data.InheritPingBeforeAssign.ValueBool() && data.PingBeforeAssign.IsNull() {
+	if !data.InheritPingBeforeAssign.ValueBool() && data.PingBeforeAssign.IsUnknown() {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("ping_before_assign"),
 			"Attribute Conflict",
