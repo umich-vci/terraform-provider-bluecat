@@ -1,3 +1,8 @@
+## 0.4.2 (March 25, 2024)
+
+BUG FIXES:
+* Fix logic error with ping_before_assign value check on `resource/bluecat_ip4_network`
+
 ## 0.4.1 (March 19, 2024)
 
 BREAKING CHANGES:
