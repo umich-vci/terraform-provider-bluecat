@@ -271,7 +271,7 @@ func (d *IP4NBRDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-// ip4NetworkProperties contains all properties returned by an IP4Network
+// ip4NetworkProperties contains all properties returned by an IP4Network.
 type ip4NetworkProperties struct {
 	name                      types.String
 	cidr                      types.String
