@@ -44,7 +44,7 @@ output "allocated_address" {
 
 - `address` (String) The IPv4 address that was allocated.
 - `expiry_time` (String) Time that IPv4 address lease expires.
-- `id` (Number) IPv4 Address identifier.
+- `id` (String) IPv4 Address identifier.
 - `lease_time` (String) Time that IPv4 address was leased.
 - `location_inherited` (Boolean) The location is inherited.
 - `parameter_request_list` (String) Time that IPv4 address lease expires.

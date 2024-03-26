@@ -28,7 +28,7 @@ Data source to access the attributes of an IPv4 network from a hint based search
 - `default_view` (Number) The object id of the default DNS View for the network.
 - `dns_restrictions` (Set of Number) The object ids of the DNS restrictions for the network.
 - `gateway` (String) The gateway of the IP4Network.
-- `id` (Number) The ID assigned to the IP4Network.
+- `id` (String) The ID assigned to the IP4Network.
 - `inherit_allow_duplicate_host` (Boolean) Duplicate host names check is inherited.
 - `inherit_default_domains` (Boolean) Default domains are inherited.
 - `inherit_default_view` (Boolean) The default DNS View is inherited.

@@ -33,7 +33,7 @@ output "bluecat_host_addresses" {
 
 - `address_ids` (Set of Number) A set of all address ids associated with the host record.
 - `addresses` (Set of String) A set of all addresses associated with the host record.
-- `id` (Number) Entity identifier
+- `id` (String) Entity identifier
 - `name` (String) The short name of the host record.
 - `parent_id` (Number) The ID of the parent of the host record.
 - `parent_type` (String) The type of the parent of the host record.

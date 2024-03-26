@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -25,7 +26,7 @@ type IP4NetworkDataSource struct {
 // IP4NetworkDataSourceModel describes the data source data model.
 type IP4NetworkDataSourceModel struct {
 	// These are exposed for a generic entity object in bluecat
-	ID         types.Int64  `tfsdk:"id"`
+	ID         types.String `tfsdk:"id"`
 	Name       types.String `tfsdk:"name"`
 	Type       types.String `tfsdk:"type"`
 	Properties types.String `tfsdk:"properties"`
@@ -74,7 +75,7 @@ func (d *IP4NetworkDataSource) Schema(ctx context.Context, req datasource.Schema
 				MarkdownDescription: "Hint to find the IP4Network",
 				Required:            true,
 			},
-			"id": schema.Int64Attribute{
+			"id": schema.StringAttribute{
 				MarkdownDescription: "The ID assigned to the IP4Network.",
 				Computed:            true,
 			},
@@ -221,7 +222,7 @@ func (d *IP4NetworkDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	data.ID = types.Int64PointerValue(hintResp.Item[0].Id)
+	data.ID = types.StringValue(strconv.FormatInt(*hintResp.Item[0].Id, 10))
 
 	// GetIP4NetworksByHint doesn't seem to return all properties so use the ID returned by it to call GetEntityById
 	entity, err := client.GetEntityById(*hintResp.Item[0].Id)

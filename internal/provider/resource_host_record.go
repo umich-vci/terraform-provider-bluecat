@@ -39,7 +39,7 @@ type HostRecordResource struct {
 // HostRecordResourceModel describes the resource data model.
 type HostRecordResourceModel struct {
 	// These are exposed for a generic entity object in bluecat
-	ID         types.Int64  `tfsdk:"id"`
+	ID         types.String `tfsdk:"id"`
 	Name       types.String `tfsdk:"name"`
 	Type       types.String `tfsdk:"type"`
 	Properties types.String `tfsdk:"properties"`
@@ -72,11 +72,11 @@ func (r *HostRecordResource) Schema(ctx context.Context, req resource.SchemaRequ
 
 		Attributes: map[string]schema.Attribute{
 			// These are exposed for Entity objects via the API
-			"id": schema.Int64Attribute{
+			"id": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Host Record identifier",
-				PlanModifiers: []planmodifier.Int64{
-					int64planmodifier.UseStateForUnknown(),
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"name": schema.StringAttribute{
@@ -213,9 +213,9 @@ func (r *HostRecordResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	data.ID = types.Int64Value(host)
+	data.ID = types.StringValue(strconv.FormatInt(host, 10))
 
-	entity, err := client.GetEntityById(data.ID.ValueInt64())
+	entity, err := client.GetEntityById(host)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
@@ -269,7 +269,12 @@ func (r *HostRecordResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	id := data.ID.ValueInt64()
+	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
+		return
+	}
 
 	entity, err := client.GetEntityById(id)
 	if err != nil {
@@ -365,23 +370,30 @@ func (r *HostRecordResource) Update(ctx context.Context, req resource.UpdateRequ
 		}
 	}
 
+	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
+		return
+	}
+
 	tflog.Debug(ctx, fmt.Sprintf("Attempting to update HostRecord with properties: %s", properties))
 
 	update := gobam.APIEntity{
-		Id:         data.ID.ValueInt64Pointer(),
+		Id:         &id,
 		Name:       data.Name.ValueStringPointer(),
 		Properties: &properties,
 		Type:       state.Type.ValueStringPointer(),
 	}
 
-	err := client.Update(&update)
+	err = client.Update(&update)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError("Host Record Update failed", err.Error())
 		return
 	}
 
-	entity, err := client.GetEntityById(data.ID.ValueInt64())
+	entity, err := client.GetEntityById(id)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
@@ -431,7 +443,12 @@ func (r *HostRecordResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	id := data.ID.ValueInt64()
+	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
+		return
+	}
 
 	entity, err := client.GetEntityById(id)
 	if err != nil {
