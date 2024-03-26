@@ -33,7 +33,7 @@ type IP4NBRDataSource struct {
 
 // IP4NBRDataSourceModel describes the data source data model.
 type IP4NBRDataSourceModel struct {
-	ID                        types.Int64  `tfsdk:"id"`
+	ID                        types.String `tfsdk:"id"`
 	Address                   types.String `tfsdk:"address"`
 	ContainerID               types.Int64  `tfsdk:"container_id"`
 	Type                      types.String `tfsdk:"type"`
@@ -69,7 +69,7 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 		MarkdownDescription: "Data source to access the attributes of an IPv4 network, IPv4 Block, or DHCPv4 Range from an IPv4 address.",
 
 		Attributes: map[string]schema.Attribute{
-			"id": schema.Int64Attribute{
+			"id": schema.StringAttribute{
 				MarkdownDescription: "Example identifier",
 				Computed:            true,
 			},
@@ -222,7 +222,7 @@ func (d *IP4NBRDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
-	data.ID = types.Int64PointerValue(ipRange.Id)
+	data.ID = types.StringValue(strconv.FormatInt(*ipRange.Id, 10))
 	data.Name = types.StringPointerValue(ipRange.Name)
 	data.Properties = types.StringPointerValue(ipRange.Properties)
 	data.Type = types.StringPointerValue(ipRange.Type)

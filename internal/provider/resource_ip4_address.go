@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -38,7 +39,7 @@ type IP4AddressResource struct {
 // IP4AddressResourceModel describes the resource data model.
 type IP4AddressResourceModel struct {
 	// These are exposed for a generic entity object in bluecat
-	ID         types.Int64  `tfsdk:"id"`
+	ID         types.String `tfsdk:"id"`
 	Name       types.String `tfsdk:"name"`
 	Type       types.String `tfsdk:"type"`
 	Properties types.String `tfsdk:"properties"`
@@ -77,11 +78,11 @@ func (r *IP4AddressResource) Schema(ctx context.Context, req resource.SchemaRequ
 
 		Attributes: map[string]schema.Attribute{
 			// These are exposed for Entity objects via the API
-			"id": schema.Int64Attribute{
+			"id": schema.StringAttribute{
 				MarkdownDescription: "IPv4 Address identifier.",
 				Computed:            true,
-				PlanModifiers: []planmodifier.Int64{
-					int64planmodifier.UseStateForUnknown(),
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"name": schema.StringAttribute{
@@ -249,9 +250,9 @@ func (r *IP4AddressResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	data.ID = types.Int64PointerValue(ip.Id)
+	data.ID = types.StringValue(strconv.FormatInt(*ip.Id, 10))
 
-	entity, err := client.GetEntityById(data.ID.ValueInt64())
+	entity, err := client.GetEntityById(*ip.Id)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
@@ -310,7 +311,14 @@ func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	entity, err := client.GetEntityById(data.ID.ValueInt64())
+	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
+		return
+	}
+
+	entity, err := client.GetEntityById(id)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError("Failed to get IP4 Address by Id", err.Error())
@@ -400,21 +408,28 @@ func (r *IP4AddressResource) Update(ctx context.Context, req resource.UpdateRequ
 		}
 	}
 
+	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
+		return
+	}
+
 	update := gobam.APIEntity{
-		Id:         data.ID.ValueInt64Pointer(),
+		Id:         &id,
 		Name:       data.Name.ValueStringPointer(),
 		Properties: &properties,
 		Type:       state.Type.ValueStringPointer(),
 	}
 
-	err := client.Update(&update)
+	err = client.Update(&update)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError("Failed to update IP4 Address", err.Error())
 		return
 	}
 
-	entity, err := client.GetEntityById(data.ID.ValueInt64())
+	entity, err := client.GetEntityById(id)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError(
@@ -471,9 +486,14 @@ func (r *IP4AddressResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	id := data.ID.ValueInt64()
+	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
+		return
+	}
 
-	err := client.Delete(id)
+	err = client.Delete(id)
 	if err != nil {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 		resp.Diagnostics.AddError("Failed to delete IP4 Address", err.Error())

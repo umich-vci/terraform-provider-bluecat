@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -27,7 +28,7 @@ type entityDataSource struct {
 
 // ExampleDataSourceModel describes the data source data model.
 type EntityDataSourceModel struct {
-	Id         types.Int64  `tfsdk:"id"`
+	Id         types.String `tfsdk:"id"`
 	Name       types.String `tfsdk:"name"`
 	Type       types.String `tfsdk:"type"`
 	ParentID   types.Int64  `tfsdk:"parent_id"`
@@ -44,7 +45,7 @@ func (d *entityDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 		MarkdownDescription: "Data source to access the attributes of a BlueCat entity.",
 
 		Attributes: map[string]schema.Attribute{
-			"id": schema.Int64Attribute{
+			"id": schema.StringAttribute{
 				MarkdownDescription: "Entity identifier",
 				Computed:            true,
 			},
@@ -126,7 +127,7 @@ func (d *entityDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
-	data.Id = types.Int64Value(*entity.Id)
+	data.Id = types.StringValue(strconv.FormatInt(*entity.Id, 10))
 	data.Properties = types.StringValue(*entity.Properties)
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)

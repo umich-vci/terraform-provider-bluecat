@@ -26,7 +26,7 @@ type HostRecordDataSource struct {
 
 // HostRecordDataSourceModel describes the data source data model.
 type HostRecordDataSourceModel struct {
-	ID                types.Int64  `tfsdk:"id"`
+	ID                types.String `tfsdk:"id"`
 	AbsoluteName      types.String `tfsdk:"absolute_name"`
 	Addresses         types.Set    `tfsdk:"addresses"`
 	AddressIDs        types.Set    `tfsdk:"address_ids"`
@@ -50,7 +50,7 @@ func (d *HostRecordDataSource) Schema(ctx context.Context, req datasource.Schema
 		MarkdownDescription: "Example data source",
 
 		Attributes: map[string]schema.Attribute{
-			"id": schema.Int64Attribute{
+			"id": schema.StringAttribute{
 				MarkdownDescription: "Entity identifier",
 				Computed:            true,
 			},
@@ -193,7 +193,7 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	data.ID = types.Int64Value(*hostRecords.Item[matchLocation].Id)
+	data.ID = types.StringValue(strconv.FormatInt(*hostRecords.Item[matchLocation].Id, 10))
 	data.Name = types.StringValue(*hostRecords.Item[matchLocation].Name)
 	data.Properties = types.StringValue(*hostRecords.Item[matchLocation].Properties)
 	data.Type = types.StringValue(*hostRecords.Item[matchLocation].Type)

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -24,7 +25,7 @@ type IP4AddressDataSource struct {
 // IP4AddressDataSourceModel describes the data source data model.
 type IP4AddressDataSourceModel struct {
 	// These are exposed for a generic entity object in bluecat
-	ID         types.Int64  `tfsdk:"id"`
+	ID         types.String `tfsdk:"id"`
 	Name       types.String `tfsdk:"name"`
 	Type       types.String `tfsdk:"type"`
 	Properties types.String `tfsdk:"properties"`
@@ -60,7 +61,7 @@ func (d *IP4AddressDataSource) Schema(ctx context.Context, req datasource.Schema
 		MarkdownDescription: "Data source to access the attributes of an IPv4 address.",
 
 		Attributes: map[string]schema.Attribute{
-			"id": schema.Int64Attribute{
+			"id": schema.StringAttribute{
 				MarkdownDescription: "IP4 Address identifier",
 				Computed:            true,
 			},
@@ -147,7 +148,7 @@ func (d *IP4AddressDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	data.ID = types.Int64PointerValue(ip4Address.Id)
+	data.ID = types.StringValue(strconv.FormatInt(*ip4Address.Id, 10))
 	data.Name = types.StringPointerValue(ip4Address.Name)
 	data.Properties = types.StringPointerValue(ip4Address.Properties)
 	data.Type = types.StringPointerValue(ip4Address.Type)
