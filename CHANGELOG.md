@@ -1,3 +1,8 @@
+## 0.4.4 (March 26, 2024)
+
+BUG FIXES:
+* Adjust plan modifiers for attributes only required for creation to allow for import.
+
 ## 0.4.3 (March 26, 2024)
 
 BREAKING CHANGES:

@@ -86,6 +86,9 @@ func (r *HostRecordResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"type": schema.StringAttribute{
 				MarkdownDescription: "The type of the resource.",
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"properties": schema.StringAttribute{
 				MarkdownDescription: "The properties of the host record as returned by the API (pipe delimited).",
@@ -103,7 +106,7 @@ func (r *HostRecordResource) Schema(ctx context.Context, req resource.SchemaRequ
 				MarkdownDescription: "The object ID of the View that host record should be created in. If changed, forces a new resource.",
 				Required:            true,
 				PlanModifiers: []planmodifier.Int64{
-					int64planmodifier.RequiresReplace(),
+					int64planmodifier.RequiresReplaceIf(hostRecordViewIDPlanModifier, hostRecordViewIDPlanModifierDescription, hostRecordViewIDPlanModifierDescription),
 				},
 			},
 			// These are exposed via the API properties field for objects of type Host Record
@@ -307,6 +310,10 @@ func (r *HostRecordResource) Read(ctx context.Context, req resource.ReadRequest,
 	data.TTL = hostRecordProperties.TTL
 	data.UserDefinedFields = hostRecordProperties.UserDefinedFields
 
+	zone := []string{}
+	zone = append(zone, strings.Split(data.AbsoluteName.ValueString(), ".")[1:]...)
+	data.DNSZone = types.StringValue(strings.Join(zone, "."))
+
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
@@ -475,4 +482,22 @@ func (r *HostRecordResource) Delete(ctx context.Context, req resource.DeleteRequ
 
 func (r *HostRecordResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+const hostRecordViewIDPlanModifierDescription string = "View ID is required for creation and cannot be changed. Null values in the state are ignored to allow for import."
+
+func hostRecordViewIDPlanModifier(ctx context.Context, p planmodifier.Int64Request, resp *int64planmodifier.RequiresReplaceIfFuncResponse) {
+	var state *HostRecordResourceModel
+	resp.Diagnostics.Append(p.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if state.ViewID.IsNull() {
+		// Since this is a required field with required values, it should only be null when doing an import
+		resp.RequiresReplace = false
+		return
+	}
+
+	resp.RequiresReplace = true
 }

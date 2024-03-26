@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"regexp"
 	"slices"
 	"strconv"
@@ -101,6 +102,9 @@ func (r *IP4NetworkResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"type": schema.StringAttribute{
 				MarkdownDescription: "The type of the resource.",
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"properties": schema.StringAttribute{
 				MarkdownDescription: "The properties of the resource as returned by the API (pipe delimited).",
@@ -113,7 +117,7 @@ func (r *IP4NetworkResource) Schema(ctx context.Context, req resource.SchemaRequ
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
 				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.RequiresReplace(),
+					boolplanmodifier.RequiresReplaceIf(ip4NetworkIsLargerAllowedPlanModifier, ip4NetworkIsLargerAllowedPlanModifierDescription, ip4NetworkIsLargerAllowedPlanModifierDescription),
 				},
 			},
 			"parent_id": schema.Int64Attribute{
@@ -139,7 +143,7 @@ func (r *IP4NetworkResource) Schema(ctx context.Context, req resource.SchemaRequ
 					stringvalidator.OneOf("NO_TRAVERSAL", "DEPTH_FIRST", "BREADTH_FIRST"),
 				},
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplaceIf(ip4NetworkTraversalMethodPlanModifier, ip4NetworkTraversalMethodPlanModifierDescription, ip4NetworkTraversalMethodPlanModifierDescription),
 				},
 			},
 
@@ -512,6 +516,26 @@ func (r *IP4NetworkResource) Read(ctx context.Context, req resource.ReadRequest,
 	data.SharedNetwork = networkProperties.SharedNetwork
 	data.UserDefinedFields = networkProperties.UserDefinedFields
 
+	// calculate the size of the network so we can set it in the state so import works
+	cidrNetmask, err := strconv.ParseInt(strings.Split(networkProperties.CIDR.ValueString(), "/")[1], 10, 64)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to parse CIDR netmask to integer", err.Error())
+		return
+	}
+	var size, e = big.NewInt(2), big.NewInt(32 - cidrNetmask)
+	size.Exp(size, e, nil)
+	data.Size = types.Int64Value(size.Int64())
+
+	// get the parent id of the network so we can set it in the state so import works
+	parent, err := client.GetParent(id)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to get parent entity of IP4 Network", err.Error())
+		return
+	}
+	data.ParentID = types.Int64Value(*parent.Id)
+
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
@@ -844,4 +868,40 @@ func (r IP4NetworkResource) ValidateConfig(ctx context.Context, req resource.Val
 			"ping_before_assign must be configured if inherit_ping_before_assign is false.",
 		)
 	}
+}
+
+const ip4NetworkIsLargerAllowedPlanModifierDescription string = "is_larger_allowed is required for creation and cannot be changed. Null values in the state are ignored to allow for import."
+
+func ip4NetworkIsLargerAllowedPlanModifier(ctx context.Context, p planmodifier.BoolRequest, resp *boolplanmodifier.RequiresReplaceIfFuncResponse) {
+	var state *IP4NetworkResourceModel
+	resp.Diagnostics.Append(p.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if state.IsLargerAllowed.IsNull() {
+		// Since this is an optional field with a default value, it should only be null when doing an import
+		resp.RequiresReplace = false
+		return
+	}
+
+	resp.RequiresReplace = true
+}
+
+const ip4NetworkTraversalMethodPlanModifierDescription string = "traversal_method is required for creation and cannot be changed. Null values in the state are ignored to allow for import."
+
+func ip4NetworkTraversalMethodPlanModifier(ctx context.Context, p planmodifier.StringRequest, resp *stringplanmodifier.RequiresReplaceIfFuncResponse) {
+	var state *IP4NetworkResourceModel
+	resp.Diagnostics.Append(p.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if state.TraversalMethod.IsNull() {
+		// Since this is a required field with required values, it should only be null when doing an import
+		resp.RequiresReplace = false
+		return
+	}
+
+	resp.RequiresReplace = true
 }

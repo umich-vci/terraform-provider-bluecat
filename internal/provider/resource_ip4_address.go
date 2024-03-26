@@ -92,6 +92,9 @@ func (r *IP4AddressResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"type": schema.StringAttribute{
 				MarkdownDescription: "The type of the resource.",
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"properties": schema.StringAttribute{
 				MarkdownDescription: "The properties of the resource as returned by the API (pipe delimited).",
@@ -104,7 +107,7 @@ func (r *IP4AddressResource) Schema(ctx context.Context, req resource.SchemaRequ
 				Computed:            true,
 				Default:             stringdefault.StaticString("MAKE_STATIC"),
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplaceIf(ip4AddressActionPlanModifier, ip4AddressActionPlanModifierDescription, ip4AddressActionPlanModifierDescription),
 				},
 				Validators: []validator.String{
 					stringvalidator.OneOf(gobam.IPAssignmentActions...),
@@ -114,7 +117,7 @@ func (r *IP4AddressResource) Schema(ctx context.Context, req resource.SchemaRequ
 				MarkdownDescription: "The object ID of the Configuration that will hold the new address. If changed, forces a new resource.",
 				Required:            true,
 				PlanModifiers: []planmodifier.Int64{
-					int64planmodifier.RequiresReplace(),
+					int64planmodifier.RequiresReplaceIf(ip4AddressConfigurationIDPlanModifier, ip4AddressConfigurationIDPlanModifierDescription, ip4AddressConfigurationIDPlanModifierDescription),
 				},
 			},
 			"parent_id": schema.Int64Attribute{
@@ -356,6 +359,15 @@ func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest,
 	data.LocationInherited = addressProperties.LocationInherited
 	data.UserDefinedFields = addressProperties.UserDefinedFields
 
+	// get the parent id of the address so we can set it in the state so import works
+	parent, err := client.GetParent(id)
+	if err != nil {
+		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.AddError("Failed to get parent entity of IP4 address", err.Error())
+		return
+	}
+	data.ParentID = types.Int64Value(*parent.Id)
+
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
@@ -505,4 +517,40 @@ func (r *IP4AddressResource) Delete(ctx context.Context, req resource.DeleteRequ
 
 func (r *IP4AddressResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+const ip4AddressActionPlanModifierDescription string = "action is required for creation and cannot be changed. Null values in the state are ignored to allow for import."
+
+func ip4AddressActionPlanModifier(ctx context.Context, p planmodifier.StringRequest, resp *stringplanmodifier.RequiresReplaceIfFuncResponse) {
+	var state *IP4AddressResourceModel
+	resp.Diagnostics.Append(p.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if state.Action.IsNull() {
+		// Since this is a required field with required values, it should only be null when doing an import
+		resp.RequiresReplace = false
+		return
+	}
+
+	resp.RequiresReplace = true
+}
+
+const ip4AddressConfigurationIDPlanModifierDescription string = "configuration_id is required for creation and cannot be changed. Null values in the state are ignored to allow for import."
+
+func ip4AddressConfigurationIDPlanModifier(ctx context.Context, p planmodifier.Int64Request, resp *int64planmodifier.RequiresReplaceIfFuncResponse) {
+	var state *IP4AddressResourceModel
+	resp.Diagnostics.Append(p.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if state.ConfigurationID.IsNull() {
+		// Since this is a required field with required values, it should only be null when doing an import
+		resp.RequiresReplace = false
+		return
+	}
+
+	resp.RequiresReplace = true
 }
