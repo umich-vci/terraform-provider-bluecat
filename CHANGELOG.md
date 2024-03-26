@@ -1,3 +1,8 @@
+## 0.4.3 (March 26, 2024)
+
+BREAKING CHANGES:
+* IDs must be treated as a string so that import works correctly.
+
 ## 0.4.2 (March 25, 2024)
 
 BUG FIXES:
