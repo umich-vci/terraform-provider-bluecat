@@ -44,7 +44,7 @@ output "bluecat_network_name" {
 - `default_view` (Number) The object id of the default DNS View for the network.
 - `dns_restrictions` (Set of Number) TODO
 - `gateway` (String) The gateway of the IPv4 network.
-- `id` (Number) Example identifier
+- `id` (String) Example identifier
 - `inherit_allow_duplicate_host` (Boolean) Duplicate host names check is inherited.
 - `inherit_default_domains` (Boolean) Default domains are inherited.
 - `inherit_default_view` (Boolean) The default DNS View is inherited.

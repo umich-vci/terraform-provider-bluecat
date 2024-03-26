@@ -45,6 +45,6 @@ output "bluecat_hostname_fqdn" {
 
 - `absolute_name` (String) The absolute name (fqdn) of the host record.
 - `address_ids` (Set of Number) A set of all address ids associated with the host record.
-- `id` (Number) Host Record identifier
+- `id` (String) Host Record identifier
 - `properties` (String) The properties of the host record as returned by the API (pipe delimited).
 - `type` (String) The type of the resource.

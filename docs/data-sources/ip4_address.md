@@ -34,7 +34,7 @@ output "bluecat_address_mac" {
 ### Read-Only
 
 - `custom_properties` (Map of String) A map of all custom properties associated with the IPv4 address.
-- `id` (Number) IP4 Address identifier
+- `id` (String) IP4 Address identifier
 - `mac_address` (String) The MAC address associated with the IPv4 address.
 - `name` (String) The name assigned to the IPv4 address.  This is not related to DNS.
 - `properties` (String) The properties of the IPv4 address as returned by the API (pipe delimited).

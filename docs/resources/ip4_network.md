@@ -54,7 +54,7 @@ output "bluecat_ip4_network_cidr" {
 ### Read-Only
 
 - `cidr` (String) The CIDR address of the IPv4 network.
-- `id` (Number) IPv4 Network identifier.
+- `id` (String) IPv4 Network identifier.
 - `location_inherited` (Boolean) The location is inherited.
 - `properties` (String) The properties of the resource as returned by the API (pipe delimited).
 - `shared_network` (String) The name of the shared network tag associated with the IP4 Network.

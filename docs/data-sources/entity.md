@@ -34,5 +34,5 @@ output "bluecat_config_id" {
 
 ### Read-Only
 
-- `id` (Number) Entity identifier
+- `id` (String) Entity identifier
 - `properties` (String) The properties of the entity as returned by the API (pipe delimited).
