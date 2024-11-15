@@ -138,10 +138,11 @@ func (r *IP4AvailableNetworkResource) Create(ctx context.Context, req resource.C
 
 	result := int64(-1)
 
-	networkIDList := []int64{}
-	diag = data.NetworkIDList.ElementsAs(ctx, networkIDList, false)
+	networkIDList := make([]int64, 0, len(data.NetworkIDList.Elements()))
+	diag = data.NetworkIDList.ElementsAs(ctx, &networkIDList, false)
 	if diag.HasError() {
 		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		resp.Diagnostics.Append(diag...)
 		resp.Diagnostics.AddError(
 			"Parsing network ids failed",
 			"",
