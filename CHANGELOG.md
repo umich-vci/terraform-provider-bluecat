@@ -1,4 +1,6 @@
-## 0.4.5 (Unreleased)
+## 0.4.5 (November 15, 2024)
+BUG FIXES:
+* resource/bluecat_ip4_available_network fix problem introduced with migration from sdk to framework
 
 IMPROVEMENTS:
 * Updated [terraform-plugin-docs](https://github.com/hashicorp/terraform-plugin-docs) to 0.20.0
