@@ -24,8 +24,12 @@ func TestAccIP4BlockResource(t *testing.T) {
 }
 
 const testAccIP4BlockResourceConfig = testAccEntityDataSourceConfig + `
+variable "ip4_block_parent_id" {
+  type = number
+}
+
 resource "bluecat_ip4_block" "test" {
-	parent_id = data.bluecat_entity.config.id
+	parent_id = var.ip4_block_parent_id
 	name      = "Test IPv4 Block"
 	size      = 256
   }
