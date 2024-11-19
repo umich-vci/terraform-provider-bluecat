@@ -23,7 +23,7 @@ func TestAccIP4BlockResource(t *testing.T) {
 	})
 }
 
-const testAccIP4BlockResourceConfig = testAccEntityDataSourceConfig + `
+const testAccIP4BlockResourceConfig = `
 variable "ip4_block_parent_id" {
   type = number
 }
