@@ -211,6 +211,7 @@ func (p *blueCatProvider) Resources(ctx context.Context) []func() resource.Resou
 		NewIP4AddressResource,
 		NewIP4NetworkResource,
 		NewIP4AvailableNetworkResource,
+		NewIP4BlockResource,
 	}
 }
 
