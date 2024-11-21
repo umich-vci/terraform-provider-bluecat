@@ -1,3 +1,11 @@
+## 0.5.0 (November 21, 2024)
+FEATURES:
+* **New Resource:** `bluecat_ip4_block` ([#113](https://github.com/umich-vci/terraform-provider-bluecat/pull/113))
+  Thanks to @aaronmaxlevy
+
+IMPROVEMENTS:
+* Updated [terraform-plugin-testing](https://github.com/hashicorp/terraform-plugin-testing) to 1.11.0
+
 ## 0.4.5 (November 15, 2024)
 BUG FIXES:
 * resource/bluecat_ip4_available_network fix problem introduced with migration from sdk to framework
