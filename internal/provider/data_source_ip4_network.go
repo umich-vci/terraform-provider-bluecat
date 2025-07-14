@@ -48,6 +48,7 @@ type IP4NetworkDataSourceModel struct {
 	LocationCode              types.String `tfsdk:"location_code"`
 	LocationInherited         types.Bool   `tfsdk:"location_inherited"`
 	SharedNetwork             types.String `tfsdk:"shared_network"`
+	DynamicUpdate             types.Bool   `tfsdk:"dynamic_update"`
 
 	// these are user defined fields that are not built-in
 	UserDefinedFields types.Map `tfsdk:"user_defined_fields"`
@@ -157,6 +158,10 @@ func (d *IP4NetworkDataSource) Schema(ctx context.Context, req datasource.Schema
 				MarkdownDescription: "The name of the shared network tag associated with the IP4 Network.",
 				Computed:            true,
 			},
+			"dynamic_update": schema.BoolAttribute{
+				MarkdownDescription: "Whether the network is dynamic update enabled.",
+				Computed:            true,
+			},
 			"user_defined_fields": schema.MapAttribute{
 				MarkdownDescription: "A map of all user-definied fields associated with the entity.",
 				Computed:            true,
@@ -263,6 +268,7 @@ func (d *IP4NetworkDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.LocationInherited = networkProperties.LocationInherited
 	data.SharedNetwork = networkProperties.SharedNetwork
 	data.UserDefinedFields = networkProperties.UserDefinedFields
+	data.DynamicUpdate = networkProperties.DynamicUpdate
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 

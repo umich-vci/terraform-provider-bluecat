@@ -66,6 +66,7 @@ type IP4NetworkResourceModel struct {
 	LocationCode              types.String `tfsdk:"location_code"`
 	LocationInherited         types.Bool   `tfsdk:"location_inherited"`
 	SharedNetwork             types.String `tfsdk:"shared_network"`
+	DynamicUpdate             types.Bool   `tfsdk:"dynamic_update"`
 
 	// these are user defined fields that are not built-in
 	UserDefinedFields types.Map `tfsdk:"user_defined_fields"`
@@ -243,6 +244,12 @@ func (r *IP4NetworkResource) Schema(ctx context.Context, req resource.SchemaRequ
 				MarkdownDescription: "The name of the shared network tag associated with the IP4 Network.",
 				Computed:            true,
 			},
+			"dynamic_update": schema.BoolAttribute{
+				MarkdownDescription: "Whether the network supports dynamic updates.",
+				Computed:            true,
+				Optional:            true,
+				Default:             booldefault.StaticBool(false),
+			},
 			"user_defined_fields": schema.MapAttribute{
 				MarkdownDescription: "A map of all user-definied fields associated with the IP4 Network.",
 				Computed:            true,
@@ -374,6 +381,10 @@ func (r *IP4NetworkResource) Create(ctx context.Context, req resource.CreateRequ
 		properties = properties + "locationCode=" + data.LocationCode.ValueString() + "|"
 	}
 
+	if !data.DynamicUpdate.IsUnknown() {
+		properties = properties + "dynamicUpdate=" + strconv.FormatBool(data.DynamicUpdate.ValueBool()) + "|"
+	}
+
 	var udfs map[string]string
 	data.UserDefinedFields.ElementsAs(ctx, &udfs, false)
 	for k, v := range udfs {
@@ -435,6 +446,7 @@ func (r *IP4NetworkResource) Create(ctx context.Context, req resource.CreateRequ
 	data.LocationInherited = networkProperties.LocationInherited
 	data.SharedNetwork = networkProperties.SharedNetwork
 	data.UserDefinedFields = networkProperties.UserDefinedFields
+	data.DynamicUpdate = networkProperties.DynamicUpdate
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
@@ -515,6 +527,7 @@ func (r *IP4NetworkResource) Read(ctx context.Context, req resource.ReadRequest,
 	data.LocationInherited = networkProperties.LocationInherited
 	data.SharedNetwork = networkProperties.SharedNetwork
 	data.UserDefinedFields = networkProperties.UserDefinedFields
+	data.DynamicUpdate = networkProperties.DynamicUpdate
 
 	// calculate the size of the network so we can set it in the state so import works
 	cidrNetmask, err := strconv.ParseInt(strings.Split(networkProperties.CIDR.ValueString(), "/")[1], 10, 64)
@@ -622,6 +635,10 @@ func (r *IP4NetworkResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	if !data.LocationCode.IsUnknown() && !data.LocationCode.Equal(state.LocationCode) {
 		properties = properties + fmt.Sprintf("locationCode=%s|", data.LocationCode.ValueString())
+	}
+
+	if !data.DynamicUpdate.IsUnknown() && !data.DynamicUpdate.Equal(state.DynamicUpdate) {
+		properties = properties + fmt.Sprintf("dynamicUpdate=%s|", strconv.FormatBool(data.DynamicUpdate.ValueBool()))
 	}
 
 	if !data.UserDefinedFields.Equal(state.UserDefinedFields) {

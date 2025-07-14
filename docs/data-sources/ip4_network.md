@@ -27,6 +27,7 @@ Data source to access the attributes of an IPv4 network from a hint based search
 - `default_domains` (Set of Number) The object ids of the default DNS domains for the network.
 - `default_view` (Number) The object id of the default DNS View for the network.
 - `dns_restrictions` (Set of Number) The object ids of the DNS restrictions for the network.
+- `dynamic_update` (Boolean) Whether the network is dynamic update enabled.
 - `gateway` (String) The gateway of the IP4Network.
 - `id` (String) The ID assigned to the IP4Network.
 - `inherit_allow_duplicate_host` (Boolean) Duplicate host names check is inherited.

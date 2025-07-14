@@ -38,6 +38,7 @@ output "bluecat_ip4_network_cidr" {
 - `default_domains` (Set of Number) The object ids of the default DNS domains for the network.
 - `default_view` (Number) The object id of the default DNS View for the network.
 - `dns_restrictions` (Set of Number) The object ids of the DNS restrictions for the network.
+- `dynamic_update` (Boolean) Whether the network supports dynamic updates.
 - `gateway` (String) The gateway of the IPv4 network.
 - `inherit_allow_duplicate_host` (Boolean) Duplicate host names check is inherited.
 - `inherit_default_domains` (Boolean) Default domains are inherited.

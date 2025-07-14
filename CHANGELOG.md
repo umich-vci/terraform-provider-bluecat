@@ -1,3 +1,14 @@
+## 0.6.0 (July 14, 2025)
+IMPROVEMENTS:
+* Updated [terraform-plugin-docs](https://github.com/hashicorp/terraform-plugin-docs) to 0.22.0
+* Updated [terraform-plugin-framework](https://github.com/hashicorp/terraform-plugin-framework) to 1.15.0
+* Updated [terraform-plugin-framework-validators](https://github.com/hashicorp/terraform-plugin-framework-validators) to 0.18.0
+* Updated [terraform-plugin-go](https://github.com/hashicorp/terraform-plugin-go) to 0.28.0
+* Updated [terraform-plugin-log](https://github.com/hashicorp/terraform-plugin-log) to 0.9.0
+* Updated [terraform-plugin-testing](https://github.com/hashicorp/terraform-plugin-testing) to 1.13.2
+* resource/bluecat_ip4_network, datasource/bluecat_ip4_network - add support for dynamicUpdate property introduced in BlueCat 9.6.0
+
+
 ## 0.5.0 (November 21, 2024)
 FEATURES:
 * **New Resource:** `bluecat_ip4_block` ([#113](https://github.com/umich-vci/terraform-provider-bluecat/pull/113))
