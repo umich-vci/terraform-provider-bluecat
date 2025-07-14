@@ -31,6 +31,7 @@ type IP4NetworkModel struct {
 	LocationCode              types.String
 	LocationInherited         types.Bool
 	SharedNetwork             types.String
+	DynamicUpdate             types.Bool
 
 	// these are user defined fields that are not built-in
 	UserDefinedFields types.Map
@@ -173,6 +174,14 @@ func flattenIP4NetworkProperties(e *gobam.APIEntity) (*IP4NetworkModel, diag.Dia
 					i.LocationInherited = types.BoolValue(b)
 				case "sharedNetwork":
 					i.SharedNetwork = types.StringValue(val)
+				case "dynamicUpdate":
+					b, err := strconv.ParseBool(val)
+					if err != nil {
+						d.AddError("error parsing dynamicUpdate to bool", err.Error())
+						break
+					}
+					i.DynamicUpdate = types.BoolValue(b)
+				// these are user defined fields that are not built-in
 				default:
 					udfMap[prop] = types.StringValue(val)
 				}
