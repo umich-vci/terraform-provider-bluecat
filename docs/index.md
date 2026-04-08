@@ -33,5 +33,5 @@ data "bluecat_entity" "config" {
 
 - `bluecat_endpoint` (String) The BlueCat Address Manager endpoint hostname. Can also use the environment variable `BLUECAT_ENDPOINT`
 - `password` (String, Sensitive) The BlueCat Address Manager password. Can also use the environment variable `BLUECAT_PASSWORD`
-- `ssl_verify` (Boolean) Verify the SSL certificate of the BlueCat Address Manager endpoint?
+- `skip_ssl_verify` (Boolean) Skip SSL certificate verification for the BlueCat Address Manager endpoint.
 - `username` (String) A BlueCat Address Manager username. Can also use the environment variable `BLUECAT_USERNAME`

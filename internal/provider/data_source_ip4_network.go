@@ -7,8 +7,10 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/umich-vci/gobam"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -182,7 +184,7 @@ func (d *IP4NetworkDataSource) Configure(ctx context.Context, req datasource.Con
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *loginClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
@@ -201,76 +203,74 @@ func (d *IP4NetworkDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	client, diag := clientLogin(ctx, d.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
+	resp.Diagnostics.Append(withClient(ctx, d.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var diags diag.Diagnostics
+
+		containerID := data.ContainerID.ValueInt64()
+		hint := data.Hint.ValueString()
+		options := "hint=" + hint
+
+		hintResp, err := client.GetIP4NetworksByHint(containerID, 0, 1, options)
+		if err != nil {
+			diags.AddError("Failed to get IP4 Networks by hint", err.Error())
+			return diags
+		}
+
+		if len(hintResp.Item) > 1 || len(hintResp.Item) == 0 {
+			diags.AddError(
+				"Network lookup error",
+				fmt.Sprintf("Hint %s returned %d networks but the data source only supports 1", hint, len(hintResp.Item)),
+			)
+			return diags
+		}
+
+		data.ID = types.StringValue(strconv.FormatInt(*hintResp.Item[0].Id, 10))
+
+		// GetIP4NetworksByHint doesn't seem to return all properties so use the ID returned by it to call GetEntityById
+		entity, err := client.GetEntityById(*hintResp.Item[0].Id)
+		if err != nil {
+			diags.AddError(
+				"Failed to get IP4 Network via Entity ID",
+				err.Error(),
+			)
+			return diags
+		}
+
+		data.Name = types.StringPointerValue(entity.Name)
+		data.Properties = types.StringPointerValue(entity.Properties)
+		data.Type = types.StringPointerValue(entity.Type)
+
+		networkProperties, flattenDiags := flattenIP4NetworkProperties(entity)
+		if flattenDiags.HasError() {
+			diags.Append(flattenDiags...)
+			return diags
+		}
+
+		data.CIDR = networkProperties.CIDR
+		data.Template = networkProperties.Template
+		data.Gateway = networkProperties.Gateway
+		data.DefaultDomains = networkProperties.DefaultDomains
+		data.DefaultView = networkProperties.DefaultView
+		data.DNSRestrictions = networkProperties.DNSRestrictions
+		data.AllowDuplicateHost = networkProperties.AllowDuplicateHost
+		data.PingBeforeAssign = networkProperties.PingBeforeAssign
+		data.InheritAllowDuplicateHost = networkProperties.InheritAllowDuplicateHost
+		data.InheritPingBeforeAssign = networkProperties.InheritPingBeforeAssign
+		data.InheritDNSRestrictions = networkProperties.InheritDNSRestrictions
+		data.InheritDefaultDomains = networkProperties.InheritDefaultDomains
+		data.InheritDefaultView = networkProperties.InheritDefaultView
+		data.LocationCode = networkProperties.LocationCode
+		data.LocationInherited = networkProperties.LocationInherited
+		data.SharedNetwork = networkProperties.SharedNetwork
+		data.UserDefinedFields = networkProperties.UserDefinedFields
+		data.DynamicUpdate = networkProperties.DynamicUpdate
+
+		return diags
+	})...)
+
+	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	containerID := data.ContainerID.ValueInt64()
-	hint := data.Hint.ValueString()
-	options := "hint=" + hint
-
-	hintResp, err := client.GetIP4NetworksByHint(containerID, 0, 1, options)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to get IP4 Networks by hint", err.Error())
-		return
-	}
-
-	if len(hintResp.Item) > 1 || len(hintResp.Item) == 0 {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Network lookup error",
-			fmt.Sprintf("Hint %s returned %d networks but the data source only supports 1", hint, len(hintResp.Item)),
-		)
-		return
-	}
-
-	data.ID = types.StringValue(strconv.FormatInt(*hintResp.Item[0].Id, 10))
-
-	// GetIP4NetworksByHint doesn't seem to return all properties so use the ID returned by it to call GetEntityById
-	entity, err := client.GetEntityById(*hintResp.Item[0].Id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to get IP4 Network via Entity ID",
-			err.Error(),
-		)
-		return
-	}
-
-	data.Name = types.StringPointerValue(entity.Name)
-	data.Properties = types.StringPointerValue(entity.Properties)
-	data.Type = types.StringPointerValue(entity.Type)
-
-	networkProperties, diag := flattenIP4NetworkProperties(entity)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-
-	data.CIDR = networkProperties.CIDR
-	data.Template = networkProperties.Template
-	data.Gateway = networkProperties.Gateway
-	data.DefaultDomains = networkProperties.DefaultDomains
-	data.DefaultView = networkProperties.DefaultView
-	data.DNSRestrictions = networkProperties.DNSRestrictions
-	data.AllowDuplicateHost = networkProperties.AllowDuplicateHost
-	data.PingBeforeAssign = networkProperties.PingBeforeAssign
-	data.InheritAllowDuplicateHost = networkProperties.InheritAllowDuplicateHost
-	data.InheritPingBeforeAssign = networkProperties.InheritPingBeforeAssign
-	data.InheritDNSRestrictions = networkProperties.InheritDNSRestrictions
-	data.InheritDefaultDomains = networkProperties.InheritDefaultDomains
-	data.InheritDefaultView = networkProperties.InheritDefaultView
-	data.LocationCode = networkProperties.LocationCode
-	data.LocationInherited = networkProperties.LocationInherited
-	data.SharedNetwork = networkProperties.SharedNetwork
-	data.UserDefinedFields = networkProperties.UserDefinedFields
-	data.DynamicUpdate = networkProperties.DynamicUpdate
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log

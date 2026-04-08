@@ -8,7 +8,7 @@ import (
 
 func TestAccIP4NetworkDataSource(t *testing.T) {
 	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { testAccCheckEnvVars(t, "TF_VAR_config_name", "TF_VAR_ip4_network_hint") },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Read testing
@@ -23,12 +23,12 @@ func TestAccIP4NetworkDataSource(t *testing.T) {
 }
 
 const testAccIP4NetworkDataSourceConfig = testAccEntityDataSourceConfig + `
-variable "ip4_address" {
-	type = string
+variable "ip4_network_hint" {
+  type = string
 }
 
 data "bluecat_ip4_network" "test" {
-	container_id = data.bluecat_entity.config.id
-	hint         = var.ip4_address
-  }
+  container_id = data.bluecat_entity.config.id
+  hint         = var.ip4_network_hint
+}
 `

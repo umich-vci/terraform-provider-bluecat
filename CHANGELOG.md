@@ -1,3 +1,37 @@
+## 0.7.0 (Unreleased)
+
+BREAKING CHANGES:
+* provider: The `ssl_verify` attribute has been replaced by `skip_ssl_verify`. The old `ssl_verify` value was passed directly to the underlying HTTP client's "insecure" parameter, meaning `ssl_verify = true` (the default) actually *skipped* TLS certificate verification. The new `skip_ssl_verify` attribute defaults to `false`, so TLS verification is now **enabled by default**. Users who need to skip TLS verification should set `skip_ssl_verify = true`.
+
+BUG FIXES:
+* datasource/bluecat_ip4_nbr: Fixed `inherit_ping_before_assign` being written to the wrong field (`inherit_allow_duplicate_host`), causing both attributes to have incorrect values.
+* resource/bluecat_ip4_available_network: Fixed infinite loop when `random = true` and all networks in the list have no free addresses.
+* resource/bluecat_ip4_network, resource/bluecat_ip4_block: Fixed `dns_restrictions` being formatted as a Go slice literal instead of a comma-separated string during updates.
+* datasource/bluecat_ip4_nbr: Removed spurious mutex unlock in `getIP4NetworkAddressUsage` that could cause a panic on error.
+* Fixed property parsing across all resources and data sources to handle malformed input without panicking and to preserve `=` characters in property values.
+* datasource/bluecat_ip4_nbr: Fixed `dnsRestrictions` parsing overwriting the diagnostics accumulator variable.
+* datasource/bluecat_ip4_address: Fixed schema/model mismatch — added missing attributes (`router_port_info`, `switch_port_info`, `vlan_info`, `lease_time`, `expiry_time`, `parameter_request_list`, `vendor_class_identifier`, `location_code`, `location_inherited`) and renamed `custom_properties` to `user_defined_fields` to match the model.
+* datasource/bluecat_ip4_address: Return a clear "IP4 Address not found" error when querying an unallocated address instead of the confusing "invalid input to flattenIP4AddressProperties" message.
+* resource/bluecat_ip4_network: Fixed `dynamic_update` not being set in state after an update operation.
+* provider: Fixed wrong error message when `ssl_verify` (now `skip_ssl_verify`) has an unknown value.
+* provider: Fixed `clientLogout` reporting errors as "login error" instead of "logout error".
+* resource/bluecat_ip4_network, resource/bluecat_ip4_block: Fixed validation error message for `dns_restrictions` incorrectly referencing `allow_duplicate_host`.
+* Fixed error messages in `flattenIP4AddressProperties` incorrectly referencing `flattenIP4Network`.
+* Fixed `Configure()` error messages across all resources and data sources incorrectly saying "Expected *http.Client" instead of "Expected *loginClient".
+* resource/bluecat_ip4_network, resource/bluecat_ip4_block: Fixed potential panic from double mutex unlock when login fails.
+
+IMPROVEMENTS:
+* Replaced per-operation login/logout boilerplate with a `withClient` helper using defer for guaranteed session cleanup.
+* Removed scaffolding template comments and placeholder descriptions.
+* resource/bluecat_ip4_available_network: `ImportState` now accepts a BlueCat network ID instead of the non-functional passthrough on the placeholder ID.
+* Updated Go to 1.25.0
+* Updated [terraform-plugin-framework](https://github.com/hashicorp/terraform-plugin-framework) to 1.19.0
+* Updated [terraform-plugin-framework-validators](https://github.com/hashicorp/terraform-plugin-framework-validators) to 0.19.0
+* Updated [terraform-plugin-go](https://github.com/hashicorp/terraform-plugin-go) to 0.31.0
+* Updated [terraform-plugin-log](https://github.com/hashicorp/terraform-plugin-log) to 0.10.0
+* Updated [terraform-plugin-testing](https://github.com/hashicorp/terraform-plugin-testing) to 1.15.0
+* Removed [terraform-plugin-docs](https://github.com/hashicorp/terraform-plugin-docs) direct dependency
+
 ## 0.6.0 (July 14, 2025)
 IMPROVEMENTS:
 * Updated [terraform-plugin-docs](https://github.com/hashicorp/terraform-plugin-docs) to 0.22.0

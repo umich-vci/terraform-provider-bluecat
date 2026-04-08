@@ -70,7 +70,7 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				MarkdownDescription: "Example identifier",
+				MarkdownDescription: "IP4 NBR identifier.",
 				Computed:            true,
 			},
 			"address": schema.StringAttribute{
@@ -110,7 +110,7 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				ElementType:         types.StringType,
 			},
 			"default_domains": schema.SetAttribute{
-				MarkdownDescription: "TODO",
+				MarkdownDescription: "The default domains for the network.",
 				Computed:            true,
 				ElementType:         types.Int64Type,
 			},
@@ -119,7 +119,7 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				Computed:            true,
 			},
 			"dns_restrictions": schema.SetAttribute{
-				MarkdownDescription: "TODO",
+				MarkdownDescription: "The object IDs of the DNS restrictions for the network.",
 				Computed:            true,
 				ElementType:         types.Int64Type,
 			},
@@ -148,11 +148,11 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				Computed:            true,
 			},
 			"location_code": schema.StringAttribute{
-				MarkdownDescription: "TODO",
+				MarkdownDescription: "The location code of the network.",
 				Computed:            true,
 			},
 			"location_inherited": schema.BoolAttribute{
-				MarkdownDescription: "TODO",
+				MarkdownDescription: "Whether the location is inherited.",
 				Computed:            true,
 			},
 			"name": schema.StringAttribute{
@@ -168,7 +168,7 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				Computed:            true,
 			},
 			"template": schema.Int64Attribute{
-				MarkdownDescription: "TODO",
+				MarkdownDescription: "The ID of the template applied to the network.",
 				Computed:            true,
 			},
 		},
@@ -186,7 +186,7 @@ func (d *IP4NBRDataSource) Configure(ctx context.Context, req datasource.Configu
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *loginClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
@@ -205,63 +205,58 @@ func (d *IP4NBRDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
-	client, diag := clientLogin(ctx, d.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
+	resp.Diagnostics.Append(withClient(ctx, d.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var diags diag.Diagnostics
 
-	containerID := data.ContainerID.ValueInt64()
-	otype := data.Type.ValueString()
-	address := data.Address.ValueString()
+		containerID := data.ContainerID.ValueInt64()
+		otype := data.Type.ValueString()
+		address := data.Address.ValueString()
 
-	ipRange, err := client.GetIPRangedByIP(containerID, otype, address)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to get IP4 Networks by hint", err.Error())
-		return
-	}
+		ipRange, err := client.GetIPRangedByIP(containerID, otype, address)
+		if err != nil {
+			diags.AddError("Failed to get IP4 Networks by hint", err.Error())
+			return diags
+		}
 
-	data.ID = types.StringValue(strconv.FormatInt(*ipRange.Id, 10))
-	data.Name = types.StringPointerValue(ipRange.Name)
-	data.Properties = types.StringPointerValue(ipRange.Properties)
-	data.Type = types.StringPointerValue(ipRange.Type)
+		data.ID = types.StringValue(strconv.FormatInt(*ipRange.Id, 10))
+		data.Name = types.StringPointerValue(ipRange.Name)
+		data.Properties = types.StringPointerValue(ipRange.Properties)
+		data.Type = types.StringPointerValue(ipRange.Type)
 
-	tflog.Info(ctx, fmt.Sprintf("parsing properties: %s", *ipRange.Properties))
-	networkProperties, diag := parseIP4NetworkProperties(*ipRange.Properties)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
+		tflog.Info(ctx, fmt.Sprintf("parsing properties: %s", *ipRange.Properties))
+		networkProperties, parseDiags := parseIP4NetworkProperties(*ipRange.Properties)
+		if parseDiags.HasError() {
+			diags.Append(parseDiags...)
+			return diags
+		}
 
-	data.CIDR = networkProperties.cidr
-	data.Template = networkProperties.template
-	data.Gateway = networkProperties.gateway
-	data.DefaultDomains = networkProperties.defaultDomains
-	data.DefaultView = networkProperties.defaultView
-	data.DNSRestrictions = networkProperties.dnsRestrictions
-	data.AllowDuplicateHost = networkProperties.allowDuplicateHost
-	data.PingBeforeAssign = networkProperties.pingBeforeAssign
-	data.InheritAllowDuplicateHost = networkProperties.inheritAllowDuplicateHost
-	data.InheritPingBeforeAssign = networkProperties.inheritPingBeforeAssign
-	data.InheritDNSRestrictions = networkProperties.inheritDNSRestrictions
-	data.InheritDefaultDomains = networkProperties.inheritDefaultDomains
-	data.InheritDefaultView = networkProperties.inheritDefaultView
-	data.LocationCode = networkProperties.locationCode
-	data.LocationInherited = networkProperties.locationInherited
-	data.CustomProperties = networkProperties.customProperties
+		data.CIDR = networkProperties.cidr
+		data.Template = networkProperties.template
+		data.Gateway = networkProperties.gateway
+		data.DefaultDomains = networkProperties.defaultDomains
+		data.DefaultView = networkProperties.defaultView
+		data.DNSRestrictions = networkProperties.dnsRestrictions
+		data.AllowDuplicateHost = networkProperties.allowDuplicateHost
+		data.PingBeforeAssign = networkProperties.pingBeforeAssign
+		data.InheritAllowDuplicateHost = networkProperties.inheritAllowDuplicateHost
+		data.InheritPingBeforeAssign = networkProperties.inheritPingBeforeAssign
+		data.InheritDNSRestrictions = networkProperties.inheritDNSRestrictions
+		data.InheritDefaultDomains = networkProperties.inheritDefaultDomains
+		data.InheritDefaultView = networkProperties.inheritDefaultView
+		data.LocationCode = networkProperties.locationCode
+		data.LocationInherited = networkProperties.locationInherited
+		data.CustomProperties = networkProperties.customProperties
 
-	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*ipRange.Id, networkProperties.cidr.ValueString(), client)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Error calculating network usage", err.Error())
-		return
-	}
-	data.AddressesInUse = types.Int64Value(addressesInUse)
-	data.AddressesFree = types.Int64Value(addressesFree)
+		addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*ipRange.Id, networkProperties.cidr.ValueString(), client)
+		if err != nil {
+			diags.AddError("Error calculating network usage", err.Error())
+			return diags
+		}
+		data.AddressesInUse = types.Int64Value(addressesInUse)
+		data.AddressesFree = types.Int64Value(addressesFree)
 
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		return diags
+	})...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
@@ -304,8 +299,12 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, diag.Di
 	props := strings.Split(properties, "|")
 	for x := range props {
 		if len(props[x]) > 0 {
-			prop := strings.Split(props[x], "=")[0]
-			val := strings.Split(props[x], "=")[1]
+			kv := strings.SplitN(props[x], "=", 2)
+			if len(kv) != 2 {
+				continue
+			}
+			prop := kv[0]
+			val := kv[1]
 
 			switch prop {
 			case "name":
@@ -355,13 +354,13 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, diag.Di
 						break
 					}
 					didList = append(didList, types.Int64Value(dID))
-					var didSet basetypes.SetValue
-					didSet, diag = basetypes.NewSetValue(types.Int64Type, didList)
-					if diag.HasError() {
-						break
-					}
-					networkProperties.dnsRestrictions = didSet
 				}
+				didSet, drDiag := basetypes.NewSetValue(types.Int64Type, didList)
+				if drDiag.HasError() {
+					diag.Append(drDiag...)
+					break
+				}
+				networkProperties.dnsRestrictions = didSet
 			case "allowDuplicateHost":
 				networkProperties.allowDuplicateHost = types.StringValue(val)
 			case "pingBeforeAssign":
@@ -379,7 +378,7 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, diag.Di
 					diag.AddError("error parsing inheritPingBeforeAssign to bool", err.Error())
 					break
 				}
-				networkProperties.inheritAllowDuplicateHost = types.BoolValue(b)
+				networkProperties.inheritPingBeforeAssign = types.BoolValue(b)
 			case "inheritDNSRestrictions":
 				b, err := strconv.ParseBool(val)
 				if err != nil {
@@ -429,7 +428,6 @@ func getIP4NetworkAddressUsage(id int64, cidr string, client gobam.ProteusAPI) (
 
 	netmask, err := strconv.ParseFloat(strings.Split(cidr, "/")[1], 64)
 	if err != nil {
-		mutex.Unlock()
 		return 0, 0, fmt.Errorf("error parsing netmask from cidr string")
 	}
 	addressCount := int(math.Pow(2, (32 - netmask)))

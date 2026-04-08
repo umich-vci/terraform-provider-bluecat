@@ -7,7 +7,9 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/umich-vci/gobam"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -73,10 +75,21 @@ func (d *IP4AddressDataSource) Schema(ctx context.Context, req datasource.Schema
 				MarkdownDescription: "The object ID of the container that has the specified `address`.  This can be a Configuration, IPv4 Block, IPv4 Network, or DHCP range.",
 				Required:            true,
 			},
-			"custom_properties": schema.MapAttribute{
-				MarkdownDescription: "A map of all custom properties associated with the IPv4 address.",
+			"expiry_time": schema.StringAttribute{
+				MarkdownDescription: "The expiry time of the IPv4 address lease.",
 				Computed:            true,
-				ElementType:         types.StringType,
+			},
+			"lease_time": schema.StringAttribute{
+				MarkdownDescription: "The lease time of the IPv4 address.",
+				Computed:            true,
+			},
+			"location_code": schema.StringAttribute{
+				MarkdownDescription: "The location code of the IPv4 address.",
+				Computed:            true,
+			},
+			"location_inherited": schema.BoolAttribute{
+				MarkdownDescription: "Whether the location is inherited.",
+				Computed:            true,
 			},
 			"mac_address": schema.StringAttribute{
 				MarkdownDescription: "The MAC address associated with the IPv4 address.",
@@ -86,16 +99,41 @@ func (d *IP4AddressDataSource) Schema(ctx context.Context, req datasource.Schema
 				MarkdownDescription: "The name assigned to the IPv4 address.  This is not related to DNS.",
 				Computed:            true,
 			},
+			"parameter_request_list": schema.StringAttribute{
+				MarkdownDescription: "The DHCP parameter request list for the IPv4 address.",
+				Computed:            true,
+			},
 			"properties": schema.StringAttribute{
 				MarkdownDescription: "The properties of the IPv4 address as returned by the API (pipe delimited).",
+				Computed:            true,
+			},
+			"router_port_info": schema.StringAttribute{
+				MarkdownDescription: "Connected router port information for the IPv4 address.",
 				Computed:            true,
 			},
 			"state": schema.StringAttribute{
 				MarkdownDescription: "The state of the IPv4 address.",
 				Computed:            true,
 			},
+			"switch_port_info": schema.StringAttribute{
+				MarkdownDescription: "Connected switch port information for the IPv4 address.",
+				Computed:            true,
+			},
 			"type": schema.StringAttribute{
 				MarkdownDescription: "The type of the resource.",
+				Computed:            true,
+			},
+			"user_defined_fields": schema.MapAttribute{
+				MarkdownDescription: "A map of all user defined fields associated with the IPv4 address.",
+				Computed:            true,
+				ElementType:         types.StringType,
+			},
+			"vendor_class_identifier": schema.StringAttribute{
+				MarkdownDescription: "The DHCP vendor class identifier for the IPv4 address.",
+				Computed:            true,
+			},
+			"vlan_info": schema.StringAttribute{
+				MarkdownDescription: "VLAN information for the IPv4 address.",
 				Computed:            true,
 			},
 		},
@@ -113,7 +151,7 @@ func (d *IP4AddressDataSource) Configure(ctx context.Context, req datasource.Con
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *loginClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
@@ -132,48 +170,52 @@ func (d *IP4AddressDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	client, diag := clientLogin(ctx, d.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-
 	containerID := data.ContainerID.ValueInt64()
 	address := data.Address.ValueString()
 
-	ip4Address, err := client.GetIP4Address(containerID, address)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to get IP4 Address", err.Error())
-		return
-	}
+	resp.Diagnostics.Append(withClient(ctx, d.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var diags diag.Diagnostics
 
-	data.ID = types.StringValue(strconv.FormatInt(*ip4Address.Id, 10))
-	data.Name = types.StringPointerValue(ip4Address.Name)
-	data.Properties = types.StringPointerValue(ip4Address.Properties)
-	data.Type = types.StringPointerValue(ip4Address.Type)
+		ip4Address, err := client.GetIP4Address(containerID, address)
+		if err != nil {
+			diags.AddError("Failed to get IP4 Address", err.Error())
+			return diags
+		}
 
-	addressProperties, diag := flattenIP4AddressProperties(ip4Address)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-	data.Address = addressProperties.Address
-	data.State = addressProperties.State
-	data.MACAddress = addressProperties.MACAddress
-	data.RouterPortInfo = addressProperties.RouterPortInfo
-	data.SwitchPortInfo = addressProperties.SwitchPortInfo
-	data.VLANInfo = addressProperties.VLANInfo
-	data.LeaseTime = addressProperties.LeaseTime
-	data.ExpiryTime = addressProperties.ExpiryTime
-	data.ParameterRequestList = addressProperties.ParameterRequestList
-	data.VendorClassIdentifier = addressProperties.VendorClassIdentifier
-	data.LocationCode = addressProperties.LocationCode
-	data.LocationInherited = addressProperties.LocationInherited
-	data.UserDefinedFields = addressProperties.UserDefinedFields
+		if ip4Address.Type == nil || *ip4Address.Type == "" {
+			diags.AddError(
+				"IP4 Address not found",
+				fmt.Sprintf("The address %s is not allocated in container %d.", address, containerID),
+			)
+			return diags
+		}
 
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		data.ID = types.StringValue(strconv.FormatInt(*ip4Address.Id, 10))
+		data.Name = types.StringPointerValue(ip4Address.Name)
+		data.Properties = types.StringPointerValue(ip4Address.Properties)
+		data.Type = types.StringPointerValue(ip4Address.Type)
+
+		addressProperties, flattenDiags := flattenIP4AddressProperties(ip4Address)
+		if flattenDiags.HasError() {
+			diags.Append(flattenDiags...)
+			return diags
+		}
+		data.Address = addressProperties.Address
+		data.State = addressProperties.State
+		data.MACAddress = addressProperties.MACAddress
+		data.RouterPortInfo = addressProperties.RouterPortInfo
+		data.SwitchPortInfo = addressProperties.SwitchPortInfo
+		data.VLANInfo = addressProperties.VLANInfo
+		data.LeaseTime = addressProperties.LeaseTime
+		data.ExpiryTime = addressProperties.ExpiryTime
+		data.ParameterRequestList = addressProperties.ParameterRequestList
+		data.VendorClassIdentifier = addressProperties.VendorClassIdentifier
+		data.LocationCode = addressProperties.LocationCode
+		data.LocationInherited = addressProperties.LocationInherited
+		data.UserDefinedFields = addressProperties.UserDefinedFields
+
+		return diags
+	})...)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

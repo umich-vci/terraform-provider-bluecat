@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"hash/crc64"
 	"math/rand"
+	"strconv"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -18,6 +20,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/umich-vci/gobam"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -55,7 +58,7 @@ func (r *IP4AvailableNetworkResource) Schema(ctx context.Context, req resource.S
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "Example identifier",
+				MarkdownDescription: "Available network identifier.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -111,7 +114,7 @@ func (r *IP4AvailableNetworkResource) Configure(ctx context.Context, req resourc
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *loginClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
@@ -130,45 +133,36 @@ func (r *IP4AvailableNetworkResource) Create(ctx context.Context, req resource.C
 		return
 	}
 
-	client, diag := clientLogin(ctx, r.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-
 	result := int64(-1)
 
-	networkIDList := make([]int64, 0, len(data.NetworkIDList.Elements()))
-	diag = data.NetworkIDList.ElementsAs(ctx, &networkIDList, false)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		resp.Diagnostics.AddError(
-			"Parsing network ids failed",
-			"",
-		)
-		return
-	}
+	resp.Diagnostics.Append(withClient(ctx, r.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var d diag.Diagnostics
 
-	seed := data.Seed.ValueString()
-	random := data.Random.ValueBool()
+		networkIDList := make([]int64, 0, len(data.NetworkIDList.Elements()))
+		diag := data.NetworkIDList.ElementsAs(ctx, &networkIDList, false)
+		if diag.HasError() {
+			d.Append(diag...)
+			d.AddError(
+				"Parsing network ids failed",
+				"",
+			)
+			return d
+		}
 
-	if len(networkIDList) == 0 {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"network_id_list cannot be empty",
-			"",
-		)
+		seed := data.Seed.ValueString()
+		random := data.Random.ValueBool()
 
-		return
-	}
+		if len(networkIDList) == 0 {
+			d.AddError(
+				"network_id_list cannot be empty",
+				"",
+			)
+			return d
+		}
 
-	if random {
-		rand := NewRand(seed)
+		if random {
+			rand := NewRand(seed)
 
-		// Keep producing permutations until we fill our result
-	Batches:
-		for {
 			perm := rand.Perm(len(networkIDList))
 
 			for _, i := range perm {
@@ -176,104 +170,96 @@ func (r *IP4AvailableNetworkResource) Create(ctx context.Context, req resource.C
 
 				entity, err := client.GetEntityById(id)
 				if err != nil {
-					resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-					resp.Diagnostics.AddError(
+					d.AddError(
 						"Failed to get IP4 Network by Id",
 						err.Error(),
 					)
-
-					return
+					return d
 				}
 
 				networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
 				if diag.HasError() {
-					resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-					resp.Diagnostics.Append(diag...)
-					return
+					d.Append(diag...)
+					return d
 				}
 
 				_, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
 				if err != nil {
-					resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-					resp.Diagnostics.AddError(
+					d.AddError(
 						"Error calculating network usage",
 						err.Error(),
 					)
-
-					return
+					return d
 				}
 
 				if addressesFree > 0 {
 					result = networkIDList[i]
-					break Batches
+					break
+				}
+			}
+
+		} else {
+
+			freeAddressMap := make(map[int64]int64)
+			for i := range networkIDList {
+				id := networkIDList[i]
+
+				entity, err := client.GetEntityById(id)
+				if err != nil {
+					d.AddError(
+						"Failed to get IP4 Network by Id",
+						err.Error(),
+					)
+					return d
+				}
+
+				networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
+				if diag.HasError() {
+					d.Append(diag...)
+					return d
+				}
+
+				_, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
+				if err != nil {
+					d.AddError(
+						"Error calculating network usage",
+						err.Error(),
+					)
+					return d
+				}
+
+				if addressesFree > 0 {
+					freeAddressMap[id] = addressesFree
+				}
+
+			}
+
+			freeCount := int64(0)
+			for k, v := range freeAddressMap {
+				if v > freeCount {
+					freeCount = v
+					result = k
 				}
 			}
 		}
 
-	} else {
-
-		freeAddressMap := make(map[int64]int64)
-		for i := range networkIDList {
-			id := networkIDList[i]
-
-			entity, err := client.GetEntityById(id)
-			if err != nil {
-				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-				resp.Diagnostics.AddError(
-					"Failed to get IP4 Network by Id",
-					err.Error(),
-				)
-
-				return
-			}
-
-			networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
-			if diag.HasError() {
-				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-				resp.Diagnostics.Append(diag...)
-				return
-			}
-
-			_, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
-			if err != nil {
-				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-				resp.Diagnostics.AddError(
-					"Error calculating network usage",
-					err.Error(),
-				)
-
-				return
-			}
-
-			if addressesFree > 0 {
-				freeAddressMap[id] = addressesFree
-			}
-
+		if result == -1 {
+			d.AddError(
+				"No networks had a free address",
+				"",
+			)
+			return d
 		}
 
-		freeCount := int64(0)
-		for k, v := range freeAddressMap {
-			if v > freeCount {
-				freeCount = v
-				result = k
-			}
-		}
-	}
+		data.ID = types.StringValue("-")
+		data.NetworkID = types.Int64Value(result)
 
-	if result == -1 {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"No networks had a free address",
-			"",
-		)
+		return d
+	})...)
 
+	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	data.ID = types.StringValue("-")
-	data.NetworkID = types.Int64Value(result)
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
@@ -293,14 +279,6 @@ func (r *IP4AvailableNetworkResource) Read(ctx context.Context, req resource.Rea
 		return
 	}
 
-	// If applicable, this is a great opportunity to initialize any necessary
-	// provider client data and make a call using it.
-	// httpResp, err := r.client.Do(httpReq)
-	// if err != nil {
-	//     resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read example, got error: %s", err))
-	//     return
-	// }
-
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -315,14 +293,6 @@ func (r *IP4AvailableNetworkResource) Update(ctx context.Context, req resource.U
 		return
 	}
 
-	// If applicable, this is a great opportunity to initialize any necessary
-	// provider client data and make a call using it.
-	// httpResp, err := r.client.Do(httpReq)
-	// if err != nil {
-	//     resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update example, got error: %s", err))
-	//     return
-	// }
-
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -336,13 +306,20 @@ func (r *IP4AvailableNetworkResource) Delete(ctx context.Context, req resource.D
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	// d.SetId("")
-	// return nil
 }
 
 func (r *IP4AvailableNetworkResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	networkID, err := strconv.ParseInt(req.ID, 10, 64)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Invalid import ID",
+			fmt.Sprintf("Expected a numeric BlueCat network ID, got: %s", req.ID),
+		)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue("-"))...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("network_id"), types.Int64Value(networkID))...)
 }
 
 // NewRand returns a seeded random number generator, using a seed derived
