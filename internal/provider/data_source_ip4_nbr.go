@@ -70,7 +70,7 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				MarkdownDescription: "Example identifier",
+				MarkdownDescription: "IP4 NBR identifier.",
 				Computed:            true,
 			},
 			"address": schema.StringAttribute{
@@ -110,7 +110,7 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				ElementType:         types.StringType,
 			},
 			"default_domains": schema.SetAttribute{
-				MarkdownDescription: "TODO",
+				MarkdownDescription: "The default domains for the network.",
 				Computed:            true,
 				ElementType:         types.Int64Type,
 			},
@@ -119,7 +119,7 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				Computed:            true,
 			},
 			"dns_restrictions": schema.SetAttribute{
-				MarkdownDescription: "TODO",
+				MarkdownDescription: "The object IDs of the DNS restrictions for the network.",
 				Computed:            true,
 				ElementType:         types.Int64Type,
 			},
@@ -148,11 +148,11 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				Computed:            true,
 			},
 			"location_code": schema.StringAttribute{
-				MarkdownDescription: "TODO",
+				MarkdownDescription: "The location code of the network.",
 				Computed:            true,
 			},
 			"location_inherited": schema.BoolAttribute{
-				MarkdownDescription: "TODO",
+				MarkdownDescription: "Whether the location is inherited.",
 				Computed:            true,
 			},
 			"name": schema.StringAttribute{
@@ -168,7 +168,7 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				Computed:            true,
 			},
 			"template": schema.Int64Attribute{
-				MarkdownDescription: "TODO",
+				MarkdownDescription: "The ID of the template applied to the network.",
 				Computed:            true,
 			},
 		},

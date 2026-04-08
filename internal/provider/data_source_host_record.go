@@ -49,7 +49,7 @@ func (d *HostRecordDataSource) Metadata(ctx context.Context, req datasource.Meta
 func (d *HostRecordDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
-		MarkdownDescription: "Example data source",
+		MarkdownDescription: "Data source to access the attributes of a host record by absolute name.",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
