@@ -27,7 +27,6 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &IP4BlockResource{}
 var _ resource.ResourceWithImportState = &IP4BlockResource{}
@@ -288,7 +287,7 @@ func (r *IP4BlockResource) Create(ctx context.Context, req resource.CreateReques
 	traversalMethod := data.TraversalMethod.ValueString()
 	autoCreate := true     //we always want to create since this is a resource after all
 	reuseExisting := false //we never want to use an existing block created outside terraform
-	Type := "IP4Block"   //Since this is the ip4_block resource we are setting the type
+	Type := "IP4Block"     //Since this is the ip4_block resource we are setting the type
 	properties := "reuseExisting=" + strconv.FormatBool(reuseExisting) + "|"
 	properties = properties + "isLargerAllowed=" + strconv.FormatBool(isLargerAllowed) + "|"
 	properties = properties + "autoCreate=" + strconv.FormatBool(autoCreate) + "|"
@@ -885,5 +884,3 @@ func ip4BlockTraversalMethodPlanModifier(ctx context.Context, p planmodifier.Str
 
 	resp.RequiresReplace = true
 }
-
-
