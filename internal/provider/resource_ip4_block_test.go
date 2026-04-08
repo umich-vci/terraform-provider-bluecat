@@ -8,10 +8,9 @@ import (
 
 func TestAccIP4BlockResource(t *testing.T) {
 	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { testAccCheckEnvVars(t, "TF_VAR_config_name", "TF_VAR_ip4_block_parent_id") },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			// Read testing
 			{
 				Config: testAccIP4BlockResourceConfig,
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -23,14 +22,14 @@ func TestAccIP4BlockResource(t *testing.T) {
 	})
 }
 
-const testAccIP4BlockResourceConfig = `
+const testAccIP4BlockResourceConfig = testAccEntityDataSourceConfig + `
 variable "ip4_block_parent_id" {
   type = number
 }
 
 resource "bluecat_ip4_block" "test" {
-	parent_id = var.ip4_block_parent_id
-	name      = "Test IPv4 Block"
-	size      = 256
-  }
+  parent_id = var.ip4_block_parent_id
+  name      = "Test IPv4 Block"
+  size      = 256
+}
 `

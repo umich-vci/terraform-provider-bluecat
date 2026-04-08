@@ -11,6 +11,7 @@ BUG FIXES:
 * Fixed property parsing across all resources and data sources to handle malformed input without panicking and to preserve `=` characters in property values.
 * datasource/bluecat_ip4_nbr: Fixed `dnsRestrictions` parsing overwriting the diagnostics accumulator variable.
 * datasource/bluecat_ip4_address: Fixed schema/model mismatch — added missing attributes (`router_port_info`, `switch_port_info`, `vlan_info`, `lease_time`, `expiry_time`, `parameter_request_list`, `vendor_class_identifier`, `location_code`, `location_inherited`) and renamed `custom_properties` to `user_defined_fields` to match the model.
+* datasource/bluecat_ip4_address: Return a clear "IP4 Address not found" error when querying an unallocated address instead of the confusing "invalid input to flattenIP4AddressProperties" message.
 * resource/bluecat_ip4_network: Fixed `dynamic_update` not being set in state after an update operation.
 * provider: Fixed wrong error message when `ssl_verify` (now `skip_ssl_verify`) has an unknown value.
 * provider: Fixed `clientLogout` reporting errors as "login error" instead of "logout error".

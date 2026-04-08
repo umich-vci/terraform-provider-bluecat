@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"testing"
 
@@ -18,9 +19,22 @@ var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServe
 }
 
 func testAccPreCheck(t *testing.T) {
-	// You can add code here to run prior to any test case execution, for example assertions
-	// about the appropriate environment variables being set are common to see in a pre-check
-	// function.
+	t.Helper()
+	for _, envVar := range []string{"BLUECAT_ENDPOINT", "BLUECAT_USERNAME", "BLUECAT_PASSWORD"} {
+		if os.Getenv(envVar) == "" {
+			t.Skipf("%s must be set for acceptance tests", envVar)
+		}
+	}
+}
+
+func testAccCheckEnvVars(t *testing.T, envVars ...string) {
+	t.Helper()
+	testAccPreCheck(t)
+	for _, envVar := range envVars {
+		if os.Getenv(envVar) == "" {
+			t.Skipf("%s must be set for this test", envVar)
+		}
+	}
 }
 
 func validateObjectID(value string) error {
