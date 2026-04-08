@@ -174,8 +174,12 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		props := strings.Split(properties, "|")
 		for y := range props {
 			if len(props[y]) > 0 {
-				prop := strings.Split(props[y], "=")[0]
-				val := strings.Split(props[y], "=")[1]
+				kv := strings.SplitN(props[y], "=", 2)
+				if len(kv) != 2 {
+					continue
+				}
+				prop := kv[0]
+				val := kv[1]
 				if prop == "absoluteName" && val == absoluteName {
 					matches++
 					matchLocation = x

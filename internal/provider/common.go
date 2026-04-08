@@ -64,8 +64,12 @@ func flattenIP4NetworkProperties(e *gobam.APIEntity) (*IP4NetworkModel, diag.Dia
 		props := strings.Split(*e.Properties, "|")
 		for x := range props {
 			if len(props[x]) > 0 {
-				prop := strings.Split(props[x], "=")[0]
-				val := strings.Split(props[x], "=")[1]
+				kv := strings.SplitN(props[x], "=", 2)
+				if len(kv) != 2 {
+					continue
+				}
+				prop := kv[0]
+				val := kv[1]
 
 				switch prop {
 				case "name":
@@ -259,8 +263,12 @@ func flattenIP4BlockProperties(e *gobam.APIEntity) (*IP4BlockModel, diag.Diagnos
 		props := strings.Split(*e.Properties, "|")
 		for x := range props {
 			if len(props[x]) > 0 {
-				prop := strings.Split(props[x], "=")[0]
-				val := strings.Split(props[x], "=")[1]
+				kv := strings.SplitN(props[x], "=", 2)
+				if len(kv) != 2 {
+					continue
+				}
+				prop := kv[0]
+				val := kv[1]
 
 				switch prop {
 				case "name":
@@ -460,8 +468,12 @@ func flattenIP4AddressProperties(e *gobam.APIEntity) (*IP4AddressModel, diag.Dia
 		props := strings.Split(*e.Properties, "|")
 		for x := range props {
 			if len(props[x]) > 0 {
-				prop := strings.Split(props[x], "=")[0]
-				val := strings.Split(props[x], "=")[1]
+				kv := strings.SplitN(props[x], "=", 2)
+				if len(kv) != 2 {
+					continue
+				}
+				prop := kv[0]
+				val := kv[1]
 
 				switch prop {
 				case "address":
@@ -556,8 +568,12 @@ func flattenHostRecordProperties(e *gobam.APIEntity) (*HostRecordModel, diag.Dia
 		props := strings.Split(*e.Properties, "|")
 		for x := range props {
 			if len(props[x]) > 0 {
-				prop := strings.Split(props[x], "=")[0]
-				val := strings.Split(props[x], "=")[1]
+				kv := strings.SplitN(props[x], "=", 2)
+				if len(kv) != 2 {
+					continue
+				}
+				prop := kv[0]
+				val := kv[1]
 
 				switch prop {
 				case "ttl":

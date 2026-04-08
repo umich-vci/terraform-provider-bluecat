@@ -304,8 +304,12 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, diag.Di
 	props := strings.Split(properties, "|")
 	for x := range props {
 		if len(props[x]) > 0 {
-			prop := strings.Split(props[x], "=")[0]
-			val := strings.Split(props[x], "=")[1]
+			kv := strings.SplitN(props[x], "=", 2)
+			if len(kv) != 2 {
+				continue
+			}
+			prop := kv[0]
+			val := kv[1]
 
 			switch prop {
 			case "name":
