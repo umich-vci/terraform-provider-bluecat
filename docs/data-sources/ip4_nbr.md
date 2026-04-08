@@ -3,12 +3,12 @@
 page_title: "bluecat_ip4_nbr Data Source - bluecat"
 subcategory: ""
 description: |-
-  Data source to access the attributes of an IPv4 network, IPv4 Block, or DHCPv4 Range from an IPv4 address.
+  Data source to access the attributes of an IPv4 network, IPv4 Block, or DHCPv4 Range from an IPv4 address or CIDR. When using cidr, container_id must be the direct parent container; when using address, container_id can be any ancestor container.
 ---
 
 # bluecat_ip4_nbr (Data Source)
 
-Data source to access the attributes of an IPv4 network, IPv4 Block, or DHCPv4 Range from an IPv4 address.
+Data source to access the attributes of an IPv4 network, IPv4 Block, or DHCPv4 Range from an IPv4 address or CIDR. When using `cidr`, `container_id` must be the direct parent container; when using `address`, `container_id` can be any ancestor container.
 
 ## Example Usage
 
@@ -29,16 +29,19 @@ output "bluecat_network_name" {
 
 ### Required
 
-- `address` (String) IP address to find the IPv4 network, IPv4 Block, or DHCPv4 Range of.
 - `container_id` (Number) The object ID of a container that contains the specified IPv4 network, block, or range.
 - `type` (String) Must be "IP4Block", "IP4Network", "DHCP4Range", or "". "" will find the most specific container.
 
+### Optional
+
+- `address` (String) IP address to find the IPv4 network, IPv4 Block, or DHCPv4 Range of. Exactly one of `address` or `cidr` must be set.
+- `cidr` (String) The CIDR address of the IPv4 network or block to look up. Cannot be used when `type` is `DHCP4Range`. Exactly one of `address` or `cidr` must be set.
+
 ### Read-Only
 
-- `addresses_free` (Number) The number of addresses unallocated/free on the network.
-- `addresses_in_use` (Number) The number of addresses allocated/in use on the network.
+- `addresses_free` (Number) The number of addresses unallocated/free on the network. Calculated by fetching all child IP4Address objects; may be slow or inaccurate for large `IP4Block` ranges.
+- `addresses_in_use` (Number) The number of addresses allocated/in use on the network. Calculated by fetching all child IP4Address objects; may be slow or inaccurate for large `IP4Block` ranges.
 - `allow_duplicate_host` (String) Duplicate host names check.
-- `cidr` (String) The CIDR address of the IPv4 network.
 - `custom_properties` (Map of String) A map of all custom properties associated with the IPv4 network.
 - `default_domains` (Set of Number) The default domains for the network.
 - `default_view` (Number) The object id of the default DNS View for the network.

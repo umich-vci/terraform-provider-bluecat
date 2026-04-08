@@ -24,6 +24,7 @@ IMPROVEMENTS:
 * Replaced per-operation login/logout boilerplate with a `withClient` helper using defer for guaranteed session cleanup.
 * Removed scaffolding template comments and placeholder descriptions.
 * resource/bluecat_ip4_available_network: `ImportState` now accepts a BlueCat network ID instead of the non-functional passthrough on the placeholder ID.
+* datasource/bluecat_ip4_nbr: `address` is now optional. A new optional `cidr` attribute allows looking up an IPv4 network or block directly by CIDR notation using the BlueCat `GetEntityByCIDR` API. Exactly one of `address` or `cidr` must be set. Note that `cidr` lookups require `container_id` to be the direct parent container; `DHCP4Range` is not supported with `cidr` and will produce a plan-time error.
 * Updated Go to 1.25.0
 * Updated [terraform-plugin-framework](https://github.com/hashicorp/terraform-plugin-framework) to 1.19.0
 * Updated [terraform-plugin-framework-validators](https://github.com/hashicorp/terraform-plugin-framework-validators) to 0.19.0
