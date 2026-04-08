@@ -73,10 +73,21 @@ func (d *IP4AddressDataSource) Schema(ctx context.Context, req datasource.Schema
 				MarkdownDescription: "The object ID of the container that has the specified `address`.  This can be a Configuration, IPv4 Block, IPv4 Network, or DHCP range.",
 				Required:            true,
 			},
-			"custom_properties": schema.MapAttribute{
-				MarkdownDescription: "A map of all custom properties associated with the IPv4 address.",
+			"expiry_time": schema.StringAttribute{
+				MarkdownDescription: "The expiry time of the IPv4 address lease.",
 				Computed:            true,
-				ElementType:         types.StringType,
+			},
+			"lease_time": schema.StringAttribute{
+				MarkdownDescription: "The lease time of the IPv4 address.",
+				Computed:            true,
+			},
+			"location_code": schema.StringAttribute{
+				MarkdownDescription: "The location code of the IPv4 address.",
+				Computed:            true,
+			},
+			"location_inherited": schema.BoolAttribute{
+				MarkdownDescription: "Whether the location is inherited.",
+				Computed:            true,
 			},
 			"mac_address": schema.StringAttribute{
 				MarkdownDescription: "The MAC address associated with the IPv4 address.",
@@ -86,16 +97,41 @@ func (d *IP4AddressDataSource) Schema(ctx context.Context, req datasource.Schema
 				MarkdownDescription: "The name assigned to the IPv4 address.  This is not related to DNS.",
 				Computed:            true,
 			},
+			"parameter_request_list": schema.StringAttribute{
+				MarkdownDescription: "The DHCP parameter request list for the IPv4 address.",
+				Computed:            true,
+			},
 			"properties": schema.StringAttribute{
 				MarkdownDescription: "The properties of the IPv4 address as returned by the API (pipe delimited).",
+				Computed:            true,
+			},
+			"router_port_info": schema.StringAttribute{
+				MarkdownDescription: "Connected router port information for the IPv4 address.",
 				Computed:            true,
 			},
 			"state": schema.StringAttribute{
 				MarkdownDescription: "The state of the IPv4 address.",
 				Computed:            true,
 			},
+			"switch_port_info": schema.StringAttribute{
+				MarkdownDescription: "Connected switch port information for the IPv4 address.",
+				Computed:            true,
+			},
 			"type": schema.StringAttribute{
 				MarkdownDescription: "The type of the resource.",
+				Computed:            true,
+			},
+			"user_defined_fields": schema.MapAttribute{
+				MarkdownDescription: "A map of all user defined fields associated with the IPv4 address.",
+				Computed:            true,
+				ElementType:         types.StringType,
+			},
+			"vendor_class_identifier": schema.StringAttribute{
+				MarkdownDescription: "The DHCP vendor class identifier for the IPv4 address.",
+				Computed:            true,
+			},
+			"vlan_info": schema.StringAttribute{
+				MarkdownDescription: "VLAN information for the IPv4 address.",
 				Computed:            true,
 			},
 		},
