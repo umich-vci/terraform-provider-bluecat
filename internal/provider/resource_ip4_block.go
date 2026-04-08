@@ -276,8 +276,7 @@ func (r *IP4BlockResource) Create(ctx context.Context, req resource.CreateReques
 
 	client, diag := clientLogin(ctx, r.client, mutex)
 	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 
@@ -443,8 +442,7 @@ func (r *IP4BlockResource) Read(ctx context.Context, req resource.ReadRequest, r
 
 	client, diag := clientLogin(ctx, r.client, mutex)
 	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 
@@ -540,8 +538,7 @@ func (r *IP4BlockResource) Update(ctx context.Context, req resource.UpdateReques
 
 	client, diag := clientLogin(ctx, r.client, mutex)
 	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 
@@ -705,8 +702,7 @@ func (r *IP4BlockResource) Delete(ctx context.Context, req resource.DeleteReques
 
 	client, diag := clientLogin(ctx, r.client, mutex)
 	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-
+		resp.Diagnostics.Append(diag...)
 		return
 	}
 
