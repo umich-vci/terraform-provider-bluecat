@@ -359,13 +359,13 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, diag.Di
 						break
 					}
 					didList = append(didList, types.Int64Value(dID))
-					var didSet basetypes.SetValue
-					didSet, diag = basetypes.NewSetValue(types.Int64Type, didList)
-					if diag.HasError() {
-						break
-					}
-					networkProperties.dnsRestrictions = didSet
 				}
+				didSet, drDiag := basetypes.NewSetValue(types.Int64Type, didList)
+				if drDiag.HasError() {
+					diag.Append(drDiag...)
+					break
+				}
+				networkProperties.dnsRestrictions = didSet
 			case "allowDuplicateHost":
 				networkProperties.allowDuplicateHost = types.StringValue(val)
 			case "pingBeforeAssign":
