@@ -450,14 +450,14 @@ func flattenIP4AddressProperties(e *gobam.APIEntity) (*IP4AddressModel, diag.Dia
 	var d diag.Diagnostics
 
 	if e == nil {
-		d.AddError("invalid input to flattenIP4Network", "entity passed was nil")
+		d.AddError("invalid input to flattenIP4AddressProperties", "entity passed was nil")
 		return nil, d
 	}
 	if e.Type == nil {
-		d.AddError("invalid input to flattenIP4Network", "type of entity passed was nil")
+		d.AddError("invalid input to flattenIP4AddressProperties", "type of entity passed was nil")
 		return nil, d
 	} else if *e.Type != "IP4Address" {
-		d.AddError("invalid input to flattenIP4Address", fmt.Sprintf("type of entity passed was %s", *e.Type))
+		d.AddError("invalid input to flattenIP4AddressProperties", fmt.Sprintf("type of entity passed was %s", *e.Type))
 		return nil, d
 	}
 

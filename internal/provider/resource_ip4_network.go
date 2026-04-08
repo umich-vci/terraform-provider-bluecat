@@ -272,7 +272,7 @@ func (r *IP4NetworkResource) Configure(ctx context.Context, req resource.Configu
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *loginClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
@@ -829,7 +829,7 @@ func (r IP4NetworkResource) ValidateConfig(ctx context.Context, req resource.Val
 		resp.Diagnostics.AddAttributeError(
 			path.Root("dns_restrictions"),
 			"Attribute Conflict",
-			"allow_duplicate_host must be configured if inherit_allow_duplicate_host is false.",
+			"dns_restrictions must be configured if inherit_dns_restrictions is false.",
 		)
 	}
 

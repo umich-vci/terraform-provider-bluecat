@@ -259,7 +259,7 @@ func clientLogout(ctx context.Context, loginClient *gobam.ProteusAPI, mutex *syn
 	err := client.Logout()
 	mutex.Unlock()
 	if err != nil {
-		diag.AddError("login error", err.Error())
+		diag.AddError("logout error", err.Error())
 		return diag
 	}
 
