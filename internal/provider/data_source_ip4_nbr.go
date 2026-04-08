@@ -429,7 +429,6 @@ func getIP4NetworkAddressUsage(id int64, cidr string, client gobam.ProteusAPI) (
 
 	netmask, err := strconv.ParseFloat(strings.Split(cidr, "/")[1], 64)
 	if err != nil {
-		mutex.Unlock()
 		return 0, 0, fmt.Errorf("error parsing netmask from cidr string")
 	}
 	addressCount := int(math.Pow(2, (32 - netmask)))
