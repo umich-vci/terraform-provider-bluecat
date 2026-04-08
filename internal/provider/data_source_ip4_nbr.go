@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 
@@ -482,13 +481,16 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, diag.Di
 func getIP4NetworkAddressUsage(id int64, cidr string, client gobam.ProteusAPI) (int64, int64, error) {
 	parts := strings.Split(cidr, "/")
 	if len(parts) != 2 {
-		return 0, 0, fmt.Errorf("error parsing netmask from cidr string %q: expected format a.b.c.d/prefix", cidr)
+		return 0, 0, fmt.Errorf("error parsing prefix from cidr string %q: expected format a.b.c.d/prefix", cidr)
 	}
-	netmask, err := strconv.ParseFloat(parts[1], 64)
+	prefix, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
-		return 0, 0, fmt.Errorf("error parsing netmask from cidr string %q: %w", cidr, err)
+		return 0, 0, fmt.Errorf("error parsing prefix from cidr string %q: %w", cidr, err)
 	}
-	addressCount := int(math.Pow(2, (32 - netmask)))
+	if prefix < 0 || prefix > 32 {
+		return 0, 0, fmt.Errorf("invalid prefix length %d in cidr string %q: must be between 0 and 32", prefix, cidr)
+	}
+	addressCount := 1 << (32 - prefix)
 
 	resp, err := client.GetEntities(id, "IP4Address", 0, addressCount)
 	if err != nil {
