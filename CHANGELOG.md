@@ -1,3 +1,23 @@
+## 0.7.0 (Unreleased)
+
+BREAKING CHANGES:
+* provider: The `ssl_verify` attribute has been renamed to `skip_ssl_verify` and its semantics have been inverted. TLS certificate verification is now **enabled by default**. Users who previously set `ssl_verify = false` to enable verification should remove that setting. Users who need to skip verification should set `skip_ssl_verify = true`.
+
+BUG FIXES:
+* datasource/bluecat_ip4_nbr: Fixed `inherit_ping_before_assign` being written to the wrong field (`inherit_allow_duplicate_host`), causing both attributes to have incorrect values.
+* resource/bluecat_ip4_available_network: Fixed infinite loop when `random = true` and all networks in the list have no free addresses.
+* resource/bluecat_ip4_network, resource/bluecat_ip4_block: Fixed `dns_restrictions` being formatted as a Go slice literal instead of a comma-separated string during updates.
+* datasource/bluecat_ip4_nbr: Removed spurious mutex unlock in `getIP4NetworkAddressUsage` that could cause a panic on error.
+* Fixed property parsing across all resources and data sources to handle malformed input without panicking and to preserve `=` characters in property values.
+* datasource/bluecat_ip4_nbr: Fixed `dnsRestrictions` parsing overwriting the diagnostics accumulator variable.
+* datasource/bluecat_ip4_address: Fixed schema/model mismatch — added missing attributes (`router_port_info`, `switch_port_info`, `vlan_info`, `lease_time`, `expiry_time`, `parameter_request_list`, `vendor_class_identifier`, `location_code`, `location_inherited`) and renamed `custom_properties` to `user_defined_fields` to match the model.
+* resource/bluecat_ip4_network: Fixed `dynamic_update` not being set in state after an update operation.
+* provider: Fixed wrong error message when `ssl_verify` (now `skip_ssl_verify`) has an unknown value.
+* provider: Fixed `clientLogout` reporting errors as "login error" instead of "logout error".
+* resource/bluecat_ip4_network, resource/bluecat_ip4_block: Fixed validation error message for `dns_restrictions` incorrectly referencing `allow_duplicate_host`.
+* Fixed error messages in `flattenIP4AddressProperties` incorrectly referencing `flattenIP4Network`.
+* Fixed `Configure()` error messages across all resources and data sources incorrectly saying "Expected *http.Client" instead of "Expected *loginClient".
+
 ## 0.6.0 (July 14, 2025)
 IMPROVEMENTS:
 * Updated [terraform-plugin-docs](https://github.com/hashicorp/terraform-plugin-docs) to 0.22.0
