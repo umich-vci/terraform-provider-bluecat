@@ -17,8 +17,12 @@ BUG FIXES:
 * resource/bluecat_ip4_network, resource/bluecat_ip4_block: Fixed validation error message for `dns_restrictions` incorrectly referencing `allow_duplicate_host`.
 * Fixed error messages in `flattenIP4AddressProperties` incorrectly referencing `flattenIP4Network`.
 * Fixed `Configure()` error messages across all resources and data sources incorrectly saying "Expected *http.Client" instead of "Expected *loginClient".
+* resource/bluecat_ip4_network, resource/bluecat_ip4_block: Fixed potential panic from double mutex unlock when login fails.
 
 IMPROVEMENTS:
+* Replaced per-operation login/logout boilerplate with a `withClient` helper using defer for guaranteed session cleanup.
+* Removed scaffolding template comments and placeholder descriptions.
+* resource/bluecat_ip4_available_network: `ImportState` now accepts a BlueCat network ID instead of the non-functional passthrough on the placeholder ID.
 * Updated Go to 1.25.0
 * Updated [terraform-plugin-framework](https://github.com/hashicorp/terraform-plugin-framework) to 1.19.0
 * Updated [terraform-plugin-framework-validators](https://github.com/hashicorp/terraform-plugin-framework-validators) to 0.19.0
