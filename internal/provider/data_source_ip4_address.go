@@ -182,6 +182,14 @@ func (d *IP4AddressDataSource) Read(ctx context.Context, req datasource.ReadRequ
 			return diags
 		}
 
+		if ip4Address.Type == nil || *ip4Address.Type == "" {
+			diags.AddError(
+				"IP4 Address not found",
+				fmt.Sprintf("The address %s is not allocated in container %d.", address, containerID),
+			)
+			return diags
+		}
+
 		data.ID = types.StringValue(strconv.FormatInt(*ip4Address.Id, 10))
 		data.Name = types.StringPointerValue(ip4Address.Name)
 		data.Properties = types.StringPointerValue(ip4Address.Properties)
