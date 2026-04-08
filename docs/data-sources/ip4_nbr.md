@@ -40,19 +40,19 @@ output "bluecat_network_name" {
 - `allow_duplicate_host` (String) Duplicate host names check.
 - `cidr` (String) The CIDR address of the IPv4 network.
 - `custom_properties` (Map of String) A map of all custom properties associated with the IPv4 network.
-- `default_domains` (Set of Number) TODO
+- `default_domains` (Set of Number) The default domains for the network.
 - `default_view` (Number) The object id of the default DNS View for the network.
-- `dns_restrictions` (Set of Number) TODO
+- `dns_restrictions` (Set of Number) The object IDs of the DNS restrictions for the network.
 - `gateway` (String) The gateway of the IPv4 network.
-- `id` (String) Example identifier
+- `id` (String) IP4 NBR identifier.
 - `inherit_allow_duplicate_host` (Boolean) Duplicate host names check is inherited.
 - `inherit_default_domains` (Boolean) Default domains are inherited.
 - `inherit_default_view` (Boolean) The default DNS View is inherited.
 - `inherit_dns_restrictions` (Boolean) DNS restrictions are inherited.
 - `inherit_ping_before_assign` (Boolean) The network pings an address before assignment is inherited.
-- `location_code` (String) TODO
-- `location_inherited` (Boolean) TODO
+- `location_code` (String) The location code of the network.
+- `location_inherited` (Boolean) Whether the location is inherited.
 - `name` (String) The name assigned the resource.
 - `ping_before_assign` (String) The network pings an address before assignment.
 - `properties` (String) The properties of the resource as returned by the API (pipe delimited).
-- `template` (Number) TODO
+- `template` (Number) The ID of the template applied to the network.

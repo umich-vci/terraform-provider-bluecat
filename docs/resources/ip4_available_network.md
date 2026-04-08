@@ -37,5 +37,5 @@ output "network_id" {
 
 ### Read-Only
 
-- `id` (String) Example identifier
+- `id` (String) Available network identifier.
 - `network_id` (Number) The network ID of the network selected by the resource.

@@ -3,12 +3,12 @@
 page_title: "bluecat_host_record Data Source - bluecat"
 subcategory: ""
 description: |-
-  Example data source
+  Data source to access the attributes of a host record by absolute name.
 ---
 
 # bluecat_host_record (Data Source)
 
-Example data source
+Data source to access the attributes of a host record by absolute name.
 
 ## Example Usage
 
