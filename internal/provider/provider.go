@@ -226,9 +226,7 @@ func New(version string) func() provider.Provider {
 // withClient handles the login/logout lifecycle for a SOAP session.
 // The provided function is called with an authenticated client, and
 // logout is guaranteed via defer even if the function panics.
-func withClient(ctx context.Context, lc *loginClient, fn func(client gobam.ProteusAPI) diag.Diagnostics) diag.Diagnostics {
-	var d diag.Diagnostics
-
+func withClient(ctx context.Context, lc *loginClient, fn func(client gobam.ProteusAPI) diag.Diagnostics) (d diag.Diagnostics) {
 	client := lc.Client
 	mutex.Lock()
 	err := client.Login(lc.Username, lc.Password)

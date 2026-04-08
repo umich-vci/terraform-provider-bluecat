@@ -214,7 +214,7 @@ func (r *HostRecordResource) Create(ctx context.Context, req resource.CreateRequ
 		entity, err := client.GetEntityById(host)
 		if err != nil {
 			d.AddError(
-				"Failed to get IP4 Address by Id after creation",
+				"Failed to get Host Record by Id after creation",
 				err.Error(),
 			)
 			return d
