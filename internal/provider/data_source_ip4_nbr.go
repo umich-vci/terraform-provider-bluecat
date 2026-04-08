@@ -379,7 +379,7 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, diag.Di
 					diag.AddError("error parsing inheritPingBeforeAssign to bool", err.Error())
 					break
 				}
-				networkProperties.inheritAllowDuplicateHost = types.BoolValue(b)
+				networkProperties.inheritPingBeforeAssign = types.BoolValue(b)
 			case "inheritDNSRestrictions":
 				b, err := strconv.ParseBool(val)
 				if err != nil {
