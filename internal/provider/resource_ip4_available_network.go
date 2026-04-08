@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/crc64"
 	"math/rand"
+	"strconv"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -278,14 +279,6 @@ func (r *IP4AvailableNetworkResource) Read(ctx context.Context, req resource.Rea
 		return
 	}
 
-	// If applicable, this is a great opportunity to initialize any necessary
-	// provider client data and make a call using it.
-	// httpResp, err := r.client.Do(httpReq)
-	// if err != nil {
-	//     resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read example, got error: %s", err))
-	//     return
-	// }
-
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -300,14 +293,6 @@ func (r *IP4AvailableNetworkResource) Update(ctx context.Context, req resource.U
 		return
 	}
 
-	// If applicable, this is a great opportunity to initialize any necessary
-	// provider client data and make a call using it.
-	// httpResp, err := r.client.Do(httpReq)
-	// if err != nil {
-	//     resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update example, got error: %s", err))
-	//     return
-	// }
-
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -321,13 +306,20 @@ func (r *IP4AvailableNetworkResource) Delete(ctx context.Context, req resource.D
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	// d.SetId("")
-	// return nil
 }
 
 func (r *IP4AvailableNetworkResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	networkID, err := strconv.ParseInt(req.ID, 10, 64)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Invalid import ID",
+			fmt.Sprintf("Expected a numeric BlueCat network ID, got: %s", req.ID),
+		)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue("-"))...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("network_id"), types.Int64Value(networkID))...)
 }
 
 // NewRand returns a seeded random number generator, using a seed derived
