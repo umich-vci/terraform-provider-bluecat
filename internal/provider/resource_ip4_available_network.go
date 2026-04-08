@@ -166,47 +166,43 @@ func (r *IP4AvailableNetworkResource) Create(ctx context.Context, req resource.C
 	if random {
 		rand := NewRand(seed)
 
-		// Keep producing permutations until we fill our result
-	Batches:
-		for {
-			perm := rand.Perm(len(networkIDList))
+		perm := rand.Perm(len(networkIDList))
 
-			for _, i := range perm {
-				id := networkIDList[i]
+		for _, i := range perm {
+			id := networkIDList[i]
 
-				entity, err := client.GetEntityById(id)
-				if err != nil {
-					resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-					resp.Diagnostics.AddError(
-						"Failed to get IP4 Network by Id",
-						err.Error(),
-					)
+			entity, err := client.GetEntityById(id)
+			if err != nil {
+				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+				resp.Diagnostics.AddError(
+					"Failed to get IP4 Network by Id",
+					err.Error(),
+				)
 
-					return
-				}
+				return
+			}
 
-				networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
-				if diag.HasError() {
-					resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-					resp.Diagnostics.Append(diag...)
-					return
-				}
+			networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
+			if diag.HasError() {
+				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+				resp.Diagnostics.Append(diag...)
+				return
+			}
 
-				_, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
-				if err != nil {
-					resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-					resp.Diagnostics.AddError(
-						"Error calculating network usage",
-						err.Error(),
-					)
+			_, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
+			if err != nil {
+				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+				resp.Diagnostics.AddError(
+					"Error calculating network usage",
+					err.Error(),
+				)
 
-					return
-				}
+				return
+			}
 
-				if addressesFree > 0 {
-					result = networkIDList[i]
-					break Batches
-				}
+			if addressesFree > 0 {
+				result = networkIDList[i]
+				break
 			}
 		}
 
