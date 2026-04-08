@@ -18,6 +18,15 @@ BUG FIXES:
 * Fixed error messages in `flattenIP4AddressProperties` incorrectly referencing `flattenIP4Network`.
 * Fixed `Configure()` error messages across all resources and data sources incorrectly saying "Expected *http.Client" instead of "Expected *loginClient".
 
+IMPROVEMENTS:
+* Updated Go to 1.25.0
+* Updated [terraform-plugin-framework](https://github.com/hashicorp/terraform-plugin-framework) to 1.19.0
+* Updated [terraform-plugin-framework-validators](https://github.com/hashicorp/terraform-plugin-framework-validators) to 0.19.0
+* Updated [terraform-plugin-go](https://github.com/hashicorp/terraform-plugin-go) to 0.31.0
+* Updated [terraform-plugin-log](https://github.com/hashicorp/terraform-plugin-log) to 0.10.0
+* Updated [terraform-plugin-testing](https://github.com/hashicorp/terraform-plugin-testing) to 1.15.0
+* Removed [terraform-plugin-docs](https://github.com/hashicorp/terraform-plugin-docs) direct dependency
+
 ## 0.6.0 (July 14, 2025)
 IMPROVEMENTS:
 * Updated [terraform-plugin-docs](https://github.com/hashicorp/terraform-plugin-docs) to 0.22.0
