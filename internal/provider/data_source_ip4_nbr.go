@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
@@ -21,6 +22,7 @@ import (
 
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ datasource.DataSource = &IP4NBRDataSource{}
+var _ datasource.DataSourceWithValidateConfig = &IP4NBRDataSource{}
 
 func NewIP4NBRDataSource() datasource.DataSource {
 	return &IP4NBRDataSource{}
@@ -66,7 +68,7 @@ func (d *IP4NBRDataSource) Metadata(ctx context.Context, req datasource.Metadata
 func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
-		MarkdownDescription: "Data source to access the attributes of an IPv4 network, IPv4 Block, or DHCPv4 Range from an IPv4 address.",
+		MarkdownDescription: "Data source to access the attributes of an IPv4 network, IPv4 Block, or DHCPv4 Range from an IPv4 address or CIDR. When using `cidr`, `container_id` must be the direct parent container; when using `address`, `container_id` can be any ancestor container.",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -74,8 +76,14 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				Computed:            true,
 			},
 			"address": schema.StringAttribute{
-				MarkdownDescription: "IP address to find the IPv4 network, IPv4 Block, or DHCPv4 Range of.",
-				Required:            true,
+				MarkdownDescription: "IP address to find the IPv4 network, IPv4 Block, or DHCPv4 Range of. Exactly one of `address` or `cidr` must be set.",
+				Optional:            true,
+				Validators: []validator.String{
+					stringvalidator.ExactlyOneOf(path.Expressions{
+						path.MatchRoot("address"),
+						path.MatchRoot("cidr"),
+					}...),
+				},
 			},
 			"container_id": schema.Int64Attribute{
 				MarkdownDescription: "The object ID of a container that contains the specified IPv4 network, block, or range.",
@@ -89,11 +97,11 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				},
 			},
 			"addresses_free": schema.Int64Attribute{
-				MarkdownDescription: "The number of addresses unallocated/free on the network.",
+				MarkdownDescription: "The number of addresses unallocated/free on the network. Calculated by fetching all child IP4Address objects; may be slow or inaccurate for large `IP4Block` ranges.",
 				Computed:            true,
 			},
 			"addresses_in_use": schema.Int64Attribute{
-				MarkdownDescription: "The number of addresses allocated/in use on the network.",
+				MarkdownDescription: "The number of addresses allocated/in use on the network. Calculated by fetching all child IP4Address objects; may be slow or inaccurate for large `IP4Block` ranges.",
 				Computed:            true,
 			},
 			"allow_duplicate_host": schema.StringAttribute{
@@ -101,8 +109,15 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				Computed:            true,
 			},
 			"cidr": schema.StringAttribute{
-				MarkdownDescription: "The CIDR address of the IPv4 network.",
+				MarkdownDescription: "The CIDR address of the IPv4 network or block to look up. Cannot be used when `type` is `DHCP4Range`. Exactly one of `address` or `cidr` must be set.",
+				Optional:            true,
 				Computed:            true,
+				Validators: []validator.String{
+					stringvalidator.ExactlyOneOf(path.Expressions{
+						path.MatchRoot("address"),
+						path.MatchRoot("cidr"),
+					}...),
+				},
 			},
 			"custom_properties": schema.MapAttribute{
 				MarkdownDescription: "A map of all custom properties associated with the IPv4 network.",
@@ -175,6 +190,22 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 	}
 }
 
+func (d *IP4NBRDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var data IP4NBRDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !data.CIDR.IsNull() && !data.CIDR.IsUnknown() && data.Type.ValueString() == "DHCP4Range" {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("type"),
+			"Invalid type for CIDR lookup",
+			"GetEntityByCIDR does not support DHCP4Range. Use \"IP4Block\" or \"IP4Network\" when cidr is specified.",
+		)
+	}
+}
+
 func (d *IP4NBRDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	// Prevent panic if the provider has not been configured.
 	if req.ProviderData == nil {
@@ -210,12 +241,30 @@ func (d *IP4NBRDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 
 		containerID := data.ContainerID.ValueInt64()
 		otype := data.Type.ValueString()
-		address := data.Address.ValueString()
 
-		ipRange, err := client.GetIPRangedByIP(containerID, otype, address)
-		if err != nil {
-			diags.AddError("Failed to get IP4 Networks by hint", err.Error())
-			return diags
+		var ipRange *gobam.APIEntity
+		var err error
+
+		if !data.Address.IsNull() && !data.Address.IsUnknown() {
+			ipRange, err = client.GetIPRangedByIP(containerID, otype, data.Address.ValueString())
+			if err != nil {
+				diags.AddError("Failed to get IP4 range by IP address", err.Error())
+				return diags
+			}
+			if *ipRange.Id == 0 {
+				diags.AddError("IP4 range not found", fmt.Sprintf("No IP4 range found containing address %s", data.Address.ValueString()))
+				return diags
+			}
+		} else {
+			ipRange, err = client.GetEntityByCIDR(containerID, data.CIDR.ValueString(), otype)
+			if err != nil {
+				diags.AddError("Failed to get IP4 range by CIDR", err.Error())
+				return diags
+			}
+			if *ipRange.Id == 0 {
+				diags.AddError("IP4 range not found", fmt.Sprintf("No IP4 range found for CIDR %s", data.CIDR.ValueString()))
+				return diags
+			}
 		}
 
 		data.ID = types.StringValue(strconv.FormatInt(*ipRange.Id, 10))
@@ -230,7 +279,11 @@ func (d *IP4NBRDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 			return diags
 		}
 
-		data.CIDR = networkProperties.cidr
+		if !networkProperties.cidr.IsNull() {
+			data.CIDR = networkProperties.cidr
+		}
+		// If cidr is still null (not in API response properties), the user-provided value
+		// in data.CIDR is preserved from the config — use it for address usage calculation.
 		data.Template = networkProperties.template
 		data.Gateway = networkProperties.gateway
 		data.DefaultDomains = networkProperties.defaultDomains
@@ -247,7 +300,7 @@ func (d *IP4NBRDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		data.LocationInherited = networkProperties.locationInherited
 		data.CustomProperties = networkProperties.customProperties
 
-		addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*ipRange.Id, networkProperties.cidr.ValueString(), client)
+		addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*ipRange.Id, data.CIDR.ValueString(), client)
 		if err != nil {
 			diags.AddError("Error calculating network usage", err.Error())
 			return diags
