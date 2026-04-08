@@ -490,15 +490,20 @@ func getIP4NetworkAddressUsage(id int64, cidr string, client gobam.ProteusAPI) (
 	if prefix < 0 || prefix > 32 {
 		return 0, 0, fmt.Errorf("invalid prefix length %d in cidr string %q: must be between 0 and 32", prefix, cidr)
 	}
-	addressCount := 1 << (32 - prefix)
+	addressCount := uint64(1) << uint(32-prefix)
+	maxInt := int(^uint(0) >> 1)
+	if addressCount > uint64(maxInt) {
+		return 0, 0, fmt.Errorf("cidr %q contains %d addresses, which is too large to enumerate on this build", cidr, addressCount)
+	}
+	addressCountInt := int(addressCount)
 
-	resp, err := client.GetEntities(id, "IP4Address", 0, addressCount)
+	resp, err := client.GetEntities(id, "IP4Address", 0, addressCountInt)
 	if err != nil {
 		return 0, 0, err
 	}
 
 	addressesInUse := int64(len(resp.Item))
-	addressesFree := int64(addressCount) - addressesInUse
+	addressesFree := int64(addressCountInt) - addressesInUse
 
 	return addressesInUse, addressesFree, nil
 }
