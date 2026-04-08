@@ -8,7 +8,9 @@ import (
 
 func TestAccIP4AddressResource(t *testing.T) {
 	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccCheckEnvVars(t, "TF_VAR_config_name", "TF_VAR_ip4_network_parent_id", "TF_VAR_host_record_dns_zone") },
+		PreCheck: func() {
+			testAccCheckEnvVars(t, "TF_VAR_config_name", "TF_VAR_ip4_network_parent_id", "TF_VAR_host_record_dns_zone")
+		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
