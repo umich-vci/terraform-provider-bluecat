@@ -32,6 +32,7 @@ import (
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &IP4NetworkResource{}
 var _ resource.ResourceWithImportState = &IP4NetworkResource{}
+var _ resource.ResourceWithValidateConfig = &IP4NetworkResource{}
 
 func NewIP4NetworkResource() resource.Resource {
 	return &IP4NetworkResource{}
