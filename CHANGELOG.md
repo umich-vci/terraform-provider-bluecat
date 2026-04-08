@@ -1,7 +1,7 @@
 ## 0.7.0 (Unreleased)
 
 BREAKING CHANGES:
-* provider: The `ssl_verify` attribute has been renamed to `skip_ssl_verify` and its semantics have been inverted. TLS certificate verification is now **enabled by default**. Users who previously set `ssl_verify = false` to enable verification should remove that setting. Users who need to skip verification should set `skip_ssl_verify = true`.
+* provider: The `ssl_verify` attribute has been replaced by `skip_ssl_verify`. The old `ssl_verify` value was passed directly to the underlying HTTP client's "insecure" parameter, meaning `ssl_verify = true` (the default) actually *skipped* TLS certificate verification. The new `skip_ssl_verify` attribute defaults to `false`, so TLS verification is now **enabled by default**. Users who need to skip TLS verification should set `skip_ssl_verify = true`.
 
 BUG FIXES:
 * datasource/bluecat_ip4_nbr: Fixed `inherit_ping_before_assign` being written to the wrong field (`inherit_allow_duplicate_host`), causing both attributes to have incorrect values.
