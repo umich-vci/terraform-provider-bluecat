@@ -566,7 +566,7 @@ func (r *IP4BlockResource) Update(ctx context.Context, req resource.UpdateReques
 		var dns []string
 		data.DNSRestrictions.ElementsAs(ctx, &dns, false)
 		if dns != nil {
-			properties = properties + fmt.Sprintf("dnsRestrictions=%s|", dns)
+			properties = properties + fmt.Sprintf("dnsRestrictions=%s|", strings.Join(dns, ","))
 		}
 
 	}
