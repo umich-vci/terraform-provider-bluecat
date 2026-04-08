@@ -112,12 +112,6 @@ func (d *IP4NBRDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				MarkdownDescription: "The CIDR address of the IPv4 network or block to look up. Cannot be used when `type` is `DHCP4Range`. Exactly one of `address` or `cidr` must be set.",
 				Optional:            true,
 				Computed:            true,
-				Validators: []validator.String{
-					stringvalidator.ExactlyOneOf(path.Expressions{
-						path.MatchRoot("address"),
-						path.MatchRoot("cidr"),
-					}...),
-				},
 			},
 			"custom_properties": schema.MapAttribute{
 				MarkdownDescription: "A map of all custom properties associated with the IPv4 network.",
@@ -245,7 +239,11 @@ func (d *IP4NBRDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		var ipRange *gobam.APIEntity
 		var err error
 
-		if !data.Address.IsNull() && !data.Address.IsUnknown() {
+		if !data.Address.IsNull() {
+			if data.Address.IsUnknown() {
+				diags.AddError("Address value is not yet known", "The address attribute must be a known value at read time.")
+				return diags
+			}
 			ipRange, err = client.GetIPRangedByIP(containerID, otype, data.Address.ValueString())
 			if err != nil {
 				diags.AddError("Failed to get IP4 range by IP address", err.Error())
@@ -256,6 +254,10 @@ func (d *IP4NBRDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 				return diags
 			}
 		} else {
+			if data.CIDR.IsNull() || data.CIDR.IsUnknown() {
+				diags.AddError("CIDR value is not yet known", "The cidr attribute must be a known value at read time.")
+				return diags
+			}
 			ipRange, err = client.GetEntityByCIDR(containerID, data.CIDR.ValueString(), otype)
 			if err != nil {
 				diags.AddError("Failed to get IP4 range by CIDR", err.Error())
@@ -478,10 +480,13 @@ func parseIP4NetworkProperties(properties string) (ip4NetworkProperties, diag.Di
 }
 
 func getIP4NetworkAddressUsage(id int64, cidr string, client gobam.ProteusAPI) (int64, int64, error) {
-
-	netmask, err := strconv.ParseFloat(strings.Split(cidr, "/")[1], 64)
+	parts := strings.Split(cidr, "/")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("error parsing netmask from cidr string %q: expected format a.b.c.d/prefix", cidr)
+	}
+	netmask, err := strconv.ParseFloat(parts[1], 64)
 	if err != nil {
-		return 0, 0, fmt.Errorf("error parsing netmask from cidr string")
+		return 0, 0, fmt.Errorf("error parsing netmask from cidr string %q: %w", cidr, err)
 	}
 	addressCount := int(math.Pow(2, (32 - netmask)))
 
