@@ -35,3 +35,5 @@ website/vendor
 *.winfile eol=crlf
 
 terraform-provider-bluecat*
+
+test-env-vars.sh
