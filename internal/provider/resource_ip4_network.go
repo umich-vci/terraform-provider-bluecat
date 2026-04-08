@@ -723,6 +723,7 @@ func (r *IP4NetworkResource) Update(ctx context.Context, req resource.UpdateRequ
 	data.LocationCode = networkProperties.LocationCode
 	data.LocationInherited = networkProperties.LocationInherited
 	data.SharedNetwork = networkProperties.SharedNetwork
+	data.DynamicUpdate = networkProperties.DynamicUpdate
 	data.UserDefinedFields = networkProperties.UserDefinedFields
 
 	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
