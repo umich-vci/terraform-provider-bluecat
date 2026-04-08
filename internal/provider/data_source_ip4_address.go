@@ -7,7 +7,9 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/umich-vci/gobam"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -168,48 +170,44 @@ func (d *IP4AddressDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	client, diag := clientLogin(ctx, d.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-
 	containerID := data.ContainerID.ValueInt64()
 	address := data.Address.ValueString()
 
-	ip4Address, err := client.GetIP4Address(containerID, address)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to get IP4 Address", err.Error())
-		return
-	}
+	resp.Diagnostics.Append(withClient(ctx, d.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var diags diag.Diagnostics
 
-	data.ID = types.StringValue(strconv.FormatInt(*ip4Address.Id, 10))
-	data.Name = types.StringPointerValue(ip4Address.Name)
-	data.Properties = types.StringPointerValue(ip4Address.Properties)
-	data.Type = types.StringPointerValue(ip4Address.Type)
+		ip4Address, err := client.GetIP4Address(containerID, address)
+		if err != nil {
+			diags.AddError("Failed to get IP4 Address", err.Error())
+			return diags
+		}
 
-	addressProperties, diag := flattenIP4AddressProperties(ip4Address)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-	data.Address = addressProperties.Address
-	data.State = addressProperties.State
-	data.MACAddress = addressProperties.MACAddress
-	data.RouterPortInfo = addressProperties.RouterPortInfo
-	data.SwitchPortInfo = addressProperties.SwitchPortInfo
-	data.VLANInfo = addressProperties.VLANInfo
-	data.LeaseTime = addressProperties.LeaseTime
-	data.ExpiryTime = addressProperties.ExpiryTime
-	data.ParameterRequestList = addressProperties.ParameterRequestList
-	data.VendorClassIdentifier = addressProperties.VendorClassIdentifier
-	data.LocationCode = addressProperties.LocationCode
-	data.LocationInherited = addressProperties.LocationInherited
-	data.UserDefinedFields = addressProperties.UserDefinedFields
+		data.ID = types.StringValue(strconv.FormatInt(*ip4Address.Id, 10))
+		data.Name = types.StringPointerValue(ip4Address.Name)
+		data.Properties = types.StringPointerValue(ip4Address.Properties)
+		data.Type = types.StringPointerValue(ip4Address.Type)
 
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		addressProperties, flattenDiags := flattenIP4AddressProperties(ip4Address)
+		if flattenDiags.HasError() {
+			diags.Append(flattenDiags...)
+			return diags
+		}
+		data.Address = addressProperties.Address
+		data.State = addressProperties.State
+		data.MACAddress = addressProperties.MACAddress
+		data.RouterPortInfo = addressProperties.RouterPortInfo
+		data.SwitchPortInfo = addressProperties.SwitchPortInfo
+		data.VLANInfo = addressProperties.VLANInfo
+		data.LeaseTime = addressProperties.LeaseTime
+		data.ExpiryTime = addressProperties.ExpiryTime
+		data.ParameterRequestList = addressProperties.ParameterRequestList
+		data.VendorClassIdentifier = addressProperties.VendorClassIdentifier
+		data.LocationCode = addressProperties.LocationCode
+		data.LocationInherited = addressProperties.LocationInherited
+		data.UserDefinedFields = addressProperties.UserDefinedFields
+
+		return diags
+	})...)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

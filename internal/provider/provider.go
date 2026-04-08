@@ -188,16 +188,6 @@ func (p *blueCatProvider) Configure(ctx context.Context, req provider.ConfigureR
 
 	client := gobam.NewClient(endpoint, skipSSLVerify)
 	loginClient := &loginClient{Client: client, Username: username, Password: password}
-	// err := client.Login(username, password)
-	// if err != nil {
-	// 	resp.Diagnostics.AddError(
-	// 		"Unable to Create BlueCat API Client",
-	// 		"An error occurred when creating the BlueCat API client. "+
-	// 			"If the error is not clear, please contact the provider developers.\n\n"+
-	// 			"BlueCat Client Error: "+err.Error(),
-	// 	)
-	// 	return
-	// }
 
 	// Make the BlueCat client available during DataSource and Resource
 	// type Configure methods.
@@ -233,36 +223,31 @@ func New(version string) func() provider.Provider {
 	}
 }
 
-func clientLogin(ctx context.Context, loginClient *loginClient, mutex *sync.Mutex) (gobam.ProteusAPI, diag.Diagnostics) {
-	var diag diag.Diagnostics
-	client := (*loginClient).Client
-	username := (*loginClient).Username
-	password := (*loginClient).Password
+// withClient handles the login/logout lifecycle for a SOAP session.
+// The provided function is called with an authenticated client, and
+// logout is guaranteed via defer even if the function panics.
+func withClient(ctx context.Context, lc *loginClient, fn func(client gobam.ProteusAPI) diag.Diagnostics) diag.Diagnostics {
+	var d diag.Diagnostics
 
+	client := lc.Client
 	mutex.Lock()
-	err := client.Login(username, password)
+	err := client.Login(lc.Username, lc.Password)
 	if err != nil {
 		mutex.Unlock()
-		diag.AddError("login error", err.Error())
-		return nil, diag
+		d.AddError("login error", err.Error())
+		return d
 	}
-
 	tflog.Trace(ctx, "Client logged in")
 
-	return client, diag
-}
+	defer func() {
+		logoutErr := client.Logout()
+		mutex.Unlock()
+		if logoutErr != nil {
+			d.AddError("logout error", logoutErr.Error())
+		}
+		tflog.Trace(ctx, "Client logged out")
+	}()
 
-func clientLogout(ctx context.Context, loginClient *gobam.ProteusAPI, mutex *sync.Mutex) diag.Diagnostics {
-	var diag diag.Diagnostics
-	client := *loginClient
-
-	err := client.Logout()
-	mutex.Unlock()
-	if err != nil {
-		diag.AddError("logout error", err.Error())
-		return diag
-	}
-
-	tflog.Trace(ctx, "Client logged out")
-	return diag
+	d.Append(fn(client)...)
+	return d
 }

@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -222,75 +223,74 @@ func (r *IP4AddressResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	client, diag := clientLogin(ctx, r.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
+	resp.Diagnostics.Append(withClient(ctx, r.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var d diag.Diagnostics
+
+		configID := data.ConfigurationID.ValueInt64()
+		parentID := data.ParentID.ValueInt64()
+		macAddress := data.MACAddress.ValueString()
+		hostInfo := "" // host records should be created as a separate resource
+		action := data.Action.ValueString()
+		name := data.Name.ValueString()
+		properties := "name=" + name + "|"
+
+		if !data.LocationCode.IsUnknown() && !data.LocationCode.IsNull() {
+			properties = properties + fmt.Sprintf("locationCode=%s|", data.LocationCode.ValueString())
+		}
+
+		var udfs map[string]string
+		d.Append(data.UserDefinedFields.ElementsAs(ctx, &udfs, false)...)
+		if d.HasError() {
+			return d
+		}
+		for k, v := range udfs {
+			properties = properties + k + "=" + v + "|"
+		}
+
+		ip, err := client.AssignNextAvailableIP4Address(configID, parentID, macAddress, hostInfo, action, properties)
+		if err != nil {
+			d.AddError("AssignNextAvailableIP4Address failed", err.Error())
+			return d
+		}
+
+		data.ID = types.StringValue(strconv.FormatInt(*ip.Id, 10))
+
+		entity, err := client.GetEntityById(*ip.Id)
+		if err != nil {
+			d.AddError("Failed to get IP4 Address by Id after creation", err.Error())
+			return d
+		}
+
+		data.Name = types.StringPointerValue(entity.Name)
+		data.Properties = types.StringPointerValue(entity.Properties)
+		data.Type = types.StringPointerValue(entity.Type)
+
+		addressProperties, diags := flattenIP4AddressProperties(entity)
+		if diags.HasError() {
+			d.Append(diags...)
+			return d
+		}
+
+		data.Address = addressProperties.Address
+		data.State = addressProperties.State
+		data.MACAddress = addressProperties.MACAddress
+		data.RouterPortInfo = addressProperties.RouterPortInfo
+		data.SwitchPortInfo = addressProperties.SwitchPortInfo
+		data.VLANInfo = addressProperties.VLANInfo
+		data.LeaseTime = addressProperties.LeaseTime
+		data.ExpiryTime = addressProperties.ExpiryTime
+		data.ParameterRequestList = addressProperties.ParameterRequestList
+		data.VendorClassIdentifier = addressProperties.VendorClassIdentifier
+		data.LocationCode = addressProperties.LocationCode
+		data.LocationInherited = addressProperties.LocationInherited
+		data.UserDefinedFields = addressProperties.UserDefinedFields
+
+		return d
+	})...)
+
+	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	configID := data.ConfigurationID.ValueInt64()
-	parentID := data.ParentID.ValueInt64()
-	macAddress := data.MACAddress.ValueString()
-	hostInfo := "" // host records should be created as a separate resource
-	action := data.Action.ValueString()
-	name := data.Name.ValueString()
-	properties := "name=" + name + "|"
-
-	if !data.LocationCode.IsUnknown() && !data.LocationCode.IsNull() {
-		properties = properties + fmt.Sprintf("locationCode=%s|", data.LocationCode.ValueString())
-	}
-
-	var udfs map[string]string
-	data.UserDefinedFields.ElementsAs(ctx, &udfs, false)
-	for k, v := range udfs {
-		properties = properties + k + "=" + v + "|"
-	}
-
-	ip, err := client.AssignNextAvailableIP4Address(configID, parentID, macAddress, hostInfo, action, properties)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("AssignNextAvailableIP4Address failed", err.Error())
-		return
-	}
-
-	data.ID = types.StringValue(strconv.FormatInt(*ip.Id, 10))
-
-	entity, err := client.GetEntityById(*ip.Id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to get IP4 Address by Id after creation",
-			err.Error(),
-		)
-		return
-	}
-
-	data.Name = types.StringPointerValue(entity.Name)
-	data.Properties = types.StringPointerValue(entity.Properties)
-	data.Type = types.StringPointerValue(entity.Type)
-
-	addressProperties, diag := flattenIP4AddressProperties(entity)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-
-	data.Address = addressProperties.Address
-	data.State = addressProperties.State
-	data.MACAddress = addressProperties.MACAddress
-	data.RouterPortInfo = addressProperties.RouterPortInfo
-	data.SwitchPortInfo = addressProperties.SwitchPortInfo
-	data.VLANInfo = addressProperties.VLANInfo
-	data.LeaseTime = addressProperties.LeaseTime
-	data.ExpiryTime = addressProperties.ExpiryTime
-	data.ParameterRequestList = addressProperties.ParameterRequestList
-	data.VendorClassIdentifier = addressProperties.VendorClassIdentifier
-	data.LocationCode = addressProperties.LocationCode
-	data.LocationInherited = addressProperties.LocationInherited
-	data.UserDefinedFields = addressProperties.UserDefinedFields
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	tflog.Trace(ctx, "created a resource")
 
@@ -308,67 +308,67 @@ func (r *IP4AddressResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	client, diag := clientLogin(ctx, r.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
+	var removed bool
+
+	resp.Diagnostics.Append(withClient(ctx, r.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var d diag.Diagnostics
+
+		id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+		if err != nil {
+			d.AddError("Failed to parse ID", err.Error())
+			return d
+		}
+
+		entity, err := client.GetEntityById(id)
+		if err != nil {
+			d.AddError("Failed to get IP4 Address by Id", err.Error())
+			return d
+		}
+
+		if *entity.Id == 0 {
+			resp.State.RemoveResource(ctx)
+			removed = true
+			return d
+		}
+
+		data.Name = types.StringPointerValue(entity.Name)
+		data.Properties = types.StringPointerValue(entity.Properties)
+		data.Type = types.StringPointerValue(entity.Type)
+
+		addressProperties, diags := flattenIP4AddressProperties(entity)
+		if diags.HasError() {
+			d.Append(diags...)
+			return d
+		}
+
+		data.Address = addressProperties.Address
+		data.State = addressProperties.State
+		data.MACAddress = addressProperties.MACAddress
+		data.RouterPortInfo = addressProperties.RouterPortInfo
+		data.SwitchPortInfo = addressProperties.SwitchPortInfo
+		data.VLANInfo = addressProperties.VLANInfo
+		data.LeaseTime = addressProperties.LeaseTime
+		data.ExpiryTime = addressProperties.ExpiryTime
+		data.ParameterRequestList = addressProperties.ParameterRequestList
+		data.VendorClassIdentifier = addressProperties.VendorClassIdentifier
+		data.LocationCode = addressProperties.LocationCode
+		data.LocationInherited = addressProperties.LocationInherited
+		data.UserDefinedFields = addressProperties.UserDefinedFields
+
+		// get the parent id of the address so we can set it in the state so import works
+		parent, err := client.GetParent(id)
+		if err != nil {
+			d.AddError("Failed to get parent entity of IP4 address", err.Error())
+			return d
+		}
+		data.ParentID = types.Int64Value(*parent.Id)
+
+		return d
+	})...)
+
+	if resp.Diagnostics.HasError() || removed {
 		return
 	}
-
-	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
-		return
-	}
-
-	entity, err := client.GetEntityById(id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to get IP4 Address by Id", err.Error())
-		return
-	}
-
-	if *entity.Id == 0 {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.State.RemoveResource(ctx)
-		return
-	}
-
-	data.Name = types.StringPointerValue(entity.Name)
-	data.Properties = types.StringPointerValue(entity.Properties)
-	data.Type = types.StringPointerValue(entity.Type)
-
-	addressProperties, diag := flattenIP4AddressProperties(entity)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-
-	data.Address = addressProperties.Address
-	data.State = addressProperties.State
-	data.MACAddress = addressProperties.MACAddress
-	data.RouterPortInfo = addressProperties.RouterPortInfo
-	data.SwitchPortInfo = addressProperties.SwitchPortInfo
-	data.VLANInfo = addressProperties.VLANInfo
-	data.LeaseTime = addressProperties.LeaseTime
-	data.ExpiryTime = addressProperties.ExpiryTime
-	data.ParameterRequestList = addressProperties.ParameterRequestList
-	data.VendorClassIdentifier = addressProperties.VendorClassIdentifier
-	data.LocationCode = addressProperties.LocationCode
-	data.LocationInherited = addressProperties.LocationInherited
-	data.UserDefinedFields = addressProperties.UserDefinedFields
-
-	// get the parent id of the address so we can set it in the state so import works
-	parent, err := client.GetParent(id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to get parent entity of IP4 address", err.Error())
-		return
-	}
-	data.ParentID = types.Int64Value(*parent.Id)
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -385,98 +385,96 @@ func (r *IP4AddressResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	client, diag := clientLogin(ctx, r.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
+	resp.Diagnostics.Append(withClient(ctx, r.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var d diag.Diagnostics
 
-	properties := ""
+		properties := ""
 
-	if !data.MACAddress.Equal(state.MACAddress) {
-		properties = properties + fmt.Sprintf("macAddress=%s|", data.MACAddress.ValueString())
-	}
-
-	if !data.LocationCode.Equal(state.LocationCode) {
-		properties = properties + fmt.Sprintf("locationCode=%s|", data.LocationCode.ValueString())
-	}
-
-	if !data.UserDefinedFields.Equal(state.UserDefinedFields) {
-		var udfs, oldudfs map[string]string
-		resp.Diagnostics.Append(data.UserDefinedFields.ElementsAs(ctx, &udfs, false)...)
-		resp.Diagnostics.Append(state.UserDefinedFields.ElementsAs(ctx, &oldudfs, false)...)
-
-		for k, v := range udfs {
-			properties = properties + fmt.Sprintf("%s=%s|", k, v)
+		if !data.MACAddress.Equal(state.MACAddress) {
+			properties = properties + fmt.Sprintf("macAddress=%s|", data.MACAddress.ValueString())
 		}
 
-		// set keys that no longer exist to empty string
-		oldkeys := maps.Keys(oldudfs)
-		keys := maps.Keys(udfs)
-		for _, x := range oldkeys {
-			if !slices.Contains(keys, x) {
-				properties = properties + fmt.Sprintf("%s=|", x)
+		if !data.LocationCode.Equal(state.LocationCode) {
+			properties = properties + fmt.Sprintf("locationCode=%s|", data.LocationCode.ValueString())
+		}
+
+		if !data.UserDefinedFields.Equal(state.UserDefinedFields) {
+			var udfs, oldudfs map[string]string
+			d.Append(data.UserDefinedFields.ElementsAs(ctx, &udfs, false)...)
+			d.Append(state.UserDefinedFields.ElementsAs(ctx, &oldudfs, false)...)
+			if d.HasError() {
+				return d
+			}
+
+			for k, v := range udfs {
+				properties = properties + fmt.Sprintf("%s=%s|", k, v)
+			}
+
+			// set keys that no longer exist to empty string
+			oldkeys := maps.Keys(oldudfs)
+			keys := maps.Keys(udfs)
+			for _, x := range oldkeys {
+				if !slices.Contains(keys, x) {
+					properties = properties + fmt.Sprintf("%s=|", x)
+				}
 			}
 		}
-	}
 
-	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
+		id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+		if err != nil {
+			d.AddError("Failed to parse ID", err.Error())
+			return d
+		}
+
+		update := gobam.APIEntity{
+			Id:         &id,
+			Name:       data.Name.ValueStringPointer(),
+			Properties: &properties,
+			Type:       state.Type.ValueStringPointer(),
+		}
+
+		err = client.Update(&update)
+		if err != nil {
+			d.AddError("Failed to update IP4 Address", err.Error())
+			return d
+		}
+
+		entity, err := client.GetEntityById(id)
+		if err != nil {
+			d.AddError("Failed to get IP4 Address by Id after creation", err.Error())
+			return d
+		}
+
+		data.Name = types.StringPointerValue(entity.Name)
+		data.Properties = types.StringPointerValue(entity.Properties)
+		data.Type = types.StringPointerValue(entity.Type)
+
+		addressProperties, diags := flattenIP4AddressProperties(entity)
+		if diags.HasError() {
+			d.Append(diags...)
+			return d
+		}
+
+		data.Address = addressProperties.Address
+		data.State = addressProperties.State
+		data.MACAddress = addressProperties.MACAddress
+		data.RouterPortInfo = addressProperties.RouterPortInfo
+		data.SwitchPortInfo = addressProperties.SwitchPortInfo
+		data.VLANInfo = addressProperties.VLANInfo
+		data.LeaseTime = addressProperties.LeaseTime
+		data.ExpiryTime = addressProperties.ExpiryTime
+		data.ParameterRequestList = addressProperties.ParameterRequestList
+		data.VendorClassIdentifier = addressProperties.VendorClassIdentifier
+		data.LocationCode = addressProperties.LocationCode
+		data.LocationInherited = addressProperties.LocationInherited
+		data.UserDefinedFields = addressProperties.UserDefinedFields
+
+		return d
+	})...)
+
+	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	update := gobam.APIEntity{
-		Id:         &id,
-		Name:       data.Name.ValueStringPointer(),
-		Properties: &properties,
-		Type:       state.Type.ValueStringPointer(),
-	}
-
-	err = client.Update(&update)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to update IP4 Address", err.Error())
-		return
-	}
-
-	entity, err := client.GetEntityById(id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to get IP4 Address by Id after creation",
-			err.Error(),
-		)
-		return
-	}
-
-	data.Name = types.StringPointerValue(entity.Name)
-	data.Properties = types.StringPointerValue(entity.Properties)
-	data.Type = types.StringPointerValue(entity.Type)
-
-	addressProperties, diag := flattenIP4AddressProperties(entity)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-
-	data.Address = addressProperties.Address
-	data.State = addressProperties.State
-	data.MACAddress = addressProperties.MACAddress
-	data.RouterPortInfo = addressProperties.RouterPortInfo
-	data.SwitchPortInfo = addressProperties.SwitchPortInfo
-	data.VLANInfo = addressProperties.VLANInfo
-	data.LeaseTime = addressProperties.LeaseTime
-	data.ExpiryTime = addressProperties.ExpiryTime
-	data.ParameterRequestList = addressProperties.ParameterRequestList
-	data.VendorClassIdentifier = addressProperties.VendorClassIdentifier
-	data.LocationCode = addressProperties.LocationCode
-	data.LocationInherited = addressProperties.LocationInherited
-	data.UserDefinedFields = addressProperties.UserDefinedFields
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -492,27 +490,23 @@ func (r *IP4AddressResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	client, diag := clientLogin(ctx, r.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
+	resp.Diagnostics.Append(withClient(ctx, r.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var d diag.Diagnostics
 
-	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
-		return
-	}
+		id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+		if err != nil {
+			d.AddError("Failed to parse ID", err.Error())
+			return d
+		}
 
-	err = client.Delete(id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to delete IP4 Address", err.Error())
-		return
-	}
+		err = client.Delete(id)
+		if err != nil {
+			d.AddError("Failed to delete IP4 Address", err.Error())
+			return d
+		}
 
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		return d
+	})...)
 }
 
 func (r *IP4AddressResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

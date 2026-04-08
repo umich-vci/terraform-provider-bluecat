@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -177,76 +178,71 @@ func (r *HostRecordResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	client, diag := clientLogin(ctx, r.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
+	resp.Diagnostics.Append(withClient(ctx, r.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var d diag.Diagnostics
 
-	viewID := data.ViewID.ValueInt64()
-	absoluteName := data.Name.ValueString() + "." + data.DNSZone.ValueString()
-	ttl := data.TTL.ValueInt64()
+		viewID := data.ViewID.ValueInt64()
+		absoluteName := data.Name.ValueString() + "." + data.DNSZone.ValueString()
+		ttl := data.TTL.ValueInt64()
 
-	var addresses []string
-	diag = data.Addresses.ElementsAs(ctx, &addresses, false)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
+		var addresses []string
+		d = data.Addresses.ElementsAs(ctx, &addresses, false)
+		if d.HasError() {
+			return d
+		}
 
-	properties := ""
-	properties = properties + fmt.Sprintf("reverseRecord=%s|", strconv.FormatBool(data.ReverseRecord.ValueBool()))
+		properties := ""
+		properties = properties + fmt.Sprintf("reverseRecord=%s|", strconv.FormatBool(data.ReverseRecord.ValueBool()))
 
-	var udfs map[string]string
-	resp.Diagnostics.Append(data.UserDefinedFields.ElementsAs(ctx, &udfs, false)...)
+		var udfs map[string]string
+		d.Append(data.UserDefinedFields.ElementsAs(ctx, &udfs, false)...)
+		if d.HasError() {
+			return d
+		}
+		for k, v := range udfs {
+			properties = properties + fmt.Sprintf("%s=%s|", k, v)
+		}
+
+		host, err := client.AddHostRecord(viewID, absoluteName, strings.Join(addresses, ","), ttl, properties)
+		if err != nil {
+			d.AddError("AddHostRecord failed", err.Error())
+			return d
+		}
+
+		data.ID = types.StringValue(strconv.FormatInt(host, 10))
+
+		entity, err := client.GetEntityById(host)
+		if err != nil {
+			d.AddError(
+				"Failed to get IP4 Address by Id after creation",
+				err.Error(),
+			)
+			return d
+		}
+
+		data.Name = types.StringPointerValue(entity.Name)
+		data.Properties = types.StringPointerValue(entity.Properties)
+		data.Type = types.StringPointerValue(entity.Type)
+
+		hrProperties, diags := flattenHostRecordProperties(entity)
+		if diags.HasError() {
+			d.Append(diags...)
+			return d
+		}
+
+		data.AbsoluteName = hrProperties.AbsoluteName
+		data.Addresses = hrProperties.Addresses
+		data.AddressIDs = hrProperties.AddressIDs
+		data.TTL = hrProperties.TTL
+		data.ReverseRecord = hrProperties.ReverseRecord
+		data.UserDefinedFields = hrProperties.UserDefinedFields
+
+		return d
+	})...)
+
 	if resp.Diagnostics.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
 		return
 	}
-	for k, v := range udfs {
-		properties = properties + fmt.Sprintf("%s=%s|", k, v)
-	}
-
-	host, err := client.AddHostRecord(viewID, absoluteName, strings.Join(addresses, ","), ttl, properties)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("AddHostRecord failed", err.Error())
-		return
-	}
-
-	data.ID = types.StringValue(strconv.FormatInt(host, 10))
-
-	entity, err := client.GetEntityById(host)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to get IP4 Address by Id after creation",
-			err.Error(),
-		)
-		return
-	}
-
-	data.Name = types.StringPointerValue(entity.Name)
-	data.Properties = types.StringPointerValue(entity.Properties)
-	data.Type = types.StringPointerValue(entity.Type)
-
-	hrProperties, diag := flattenHostRecordProperties(entity)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-
-	data.AbsoluteName = hrProperties.AbsoluteName
-	data.Addresses = hrProperties.Addresses
-	data.AddressIDs = hrProperties.AddressIDs
-	data.TTL = hrProperties.TTL
-	data.ReverseRecord = hrProperties.ReverseRecord
-	data.UserDefinedFields = hrProperties.UserDefinedFields
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
@@ -266,55 +262,60 @@ func (r *HostRecordResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	client, diag := clientLogin(ctx, r.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
+	var removeResource bool
+
+	resp.Diagnostics.Append(withClient(ctx, r.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var d diag.Diagnostics
+
+		id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+		if err != nil {
+			d.AddError("Failed to parse ID", err.Error())
+			return d
+		}
+
+		entity, err := client.GetEntityById(id)
+		if err != nil {
+			d.AddError("Failed to get host record by Id", err.Error())
+			return d
+		}
+
+		if *entity.Id == 0 {
+			removeResource = true
+			return d
+		}
+
+		data.Name = types.StringPointerValue(entity.Name)
+		data.Properties = types.StringPointerValue(entity.Properties)
+		data.Type = types.StringPointerValue(entity.Type)
+
+		hostRecordProperties, diags := flattenHostRecordProperties(entity)
+		if diags.HasError() {
+			d.Append(diags...)
+			return d
+		}
+
+		data.AbsoluteName = hostRecordProperties.AbsoluteName
+		data.Addresses = hostRecordProperties.Addresses
+		data.AddressIDs = hostRecordProperties.AddressIDs
+		data.ReverseRecord = hostRecordProperties.ReverseRecord
+		data.TTL = hostRecordProperties.TTL
+		data.UserDefinedFields = hostRecordProperties.UserDefinedFields
+
+		zone := []string{}
+		zone = append(zone, strings.Split(data.AbsoluteName.ValueString(), ".")[1:]...)
+		data.DNSZone = types.StringValue(strings.Join(zone, "."))
+
+		return d
+	})...)
+
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
-		return
-	}
-
-	entity, err := client.GetEntityById(id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to get host record by Id", err.Error())
-		return
-	}
-
-	if *entity.Id == 0 {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+	if removeResource {
 		resp.State.RemoveResource(ctx)
 		return
 	}
-
-	data.Name = types.StringPointerValue(entity.Name)
-	data.Properties = types.StringPointerValue(entity.Properties)
-	data.Type = types.StringPointerValue(entity.Type)
-
-	hostRecordProperties, diag := flattenHostRecordProperties(entity)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		return
-	}
-
-	data.AbsoluteName = hostRecordProperties.AbsoluteName
-	data.Addresses = hostRecordProperties.Addresses
-	data.AddressIDs = hostRecordProperties.AddressIDs
-	data.ReverseRecord = hostRecordProperties.ReverseRecord
-	data.TTL = hostRecordProperties.TTL
-	data.UserDefinedFields = hostRecordProperties.UserDefinedFields
-
-	zone := []string{}
-	zone = append(zone, strings.Split(data.AbsoluteName.ValueString(), ".")[1:]...)
-	data.DNSZone = types.StringValue(strings.Join(zone, "."))
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -331,104 +332,102 @@ func (r *HostRecordResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	client, diag := clientLogin(ctx, r.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
+	resp.Diagnostics.Append(withClient(ctx, r.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var d diag.Diagnostics
 
-	if resp.Diagnostics.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
+		properties := ""
 
-	properties := ""
+		// addresses must always be set
+		var addresses []string
+		d.Append(data.Addresses.ElementsAs(ctx, &addresses, false)...)
+		if d.HasError() {
+			return d
+		}
+		properties = properties + fmt.Sprintf("addresses=%s|", strings.Join(addresses, ","))
 
-	// addresses must always be set
-	var addresses []string
-	resp.Diagnostics.Append(data.Addresses.ElementsAs(ctx, &addresses, false)...)
-	properties = properties + fmt.Sprintf("addresses=%s|", strings.Join(addresses, ","))
-
-	if !data.ReverseRecord.Equal(state.ReverseRecord) {
-		properties = properties + fmt.Sprintf("reverseRecord=%s|", strconv.FormatBool(data.ReverseRecord.ValueBool()))
-	}
-
-	if !data.TTL.Equal(state.TTL) {
-		properties = properties + fmt.Sprintf("ttl=%d|", data.TTL.ValueInt64())
-	}
-
-	if !data.UserDefinedFields.Equal(state.UserDefinedFields) {
-		var udfs, oldudfs map[string]string
-		resp.Diagnostics.Append(data.UserDefinedFields.ElementsAs(ctx, &udfs, false)...)
-		resp.Diagnostics.Append(state.UserDefinedFields.ElementsAs(ctx, &oldudfs, false)...)
-
-		for k, v := range udfs {
-			properties = properties + fmt.Sprintf("%s=%s|", k, v)
+		if !data.ReverseRecord.Equal(state.ReverseRecord) {
+			properties = properties + fmt.Sprintf("reverseRecord=%s|", strconv.FormatBool(data.ReverseRecord.ValueBool()))
 		}
 
-		// set keys that no longer exist to empty string
-		oldkeys := maps.Keys(oldudfs)
-		keys := maps.Keys(udfs)
-		for _, x := range oldkeys {
-			if !slices.Contains(keys, x) {
-				properties = properties + fmt.Sprintf("%s=|", x)
+		if !data.TTL.Equal(state.TTL) {
+			properties = properties + fmt.Sprintf("ttl=%d|", data.TTL.ValueInt64())
+		}
+
+		if !data.UserDefinedFields.Equal(state.UserDefinedFields) {
+			var udfs, oldudfs map[string]string
+			d.Append(data.UserDefinedFields.ElementsAs(ctx, &udfs, false)...)
+			d.Append(state.UserDefinedFields.ElementsAs(ctx, &oldudfs, false)...)
+			if d.HasError() {
+				return d
+			}
+
+			for k, v := range udfs {
+				properties = properties + fmt.Sprintf("%s=%s|", k, v)
+			}
+
+			// set keys that no longer exist to empty string
+			oldkeys := maps.Keys(oldudfs)
+			keys := maps.Keys(udfs)
+			for _, x := range oldkeys {
+				if !slices.Contains(keys, x) {
+					properties = properties + fmt.Sprintf("%s=|", x)
+				}
 			}
 		}
-	}
 
-	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
+		id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+		if err != nil {
+			d.AddError("Failed to parse ID", err.Error())
+			return d
+		}
+
+		tflog.Debug(ctx, fmt.Sprintf("Attempting to update HostRecord with properties: %s", properties))
+
+		update := gobam.APIEntity{
+			Id:         &id,
+			Name:       data.Name.ValueStringPointer(),
+			Properties: &properties,
+			Type:       state.Type.ValueStringPointer(),
+		}
+
+		err = client.Update(&update)
+		if err != nil {
+			d.AddError("Host Record Update failed", err.Error())
+			return d
+		}
+
+		entity, err := client.GetEntityById(id)
+		if err != nil {
+			d.AddError(
+				"Failed to get host record by Id after update",
+				err.Error(),
+			)
+			return d
+		}
+
+		data.Name = types.StringPointerValue(entity.Name)
+		data.Properties = types.StringPointerValue(entity.Properties)
+		data.Type = types.StringPointerValue(entity.Type)
+
+		hrProperties, diags := flattenHostRecordProperties(entity)
+		if diags.HasError() {
+			d.Append(diags...)
+			return d
+		}
+
+		data.AbsoluteName = hrProperties.AbsoluteName
+		data.Addresses = hrProperties.Addresses
+		data.AddressIDs = hrProperties.AddressIDs
+		data.TTL = hrProperties.TTL
+		data.ReverseRecord = hrProperties.ReverseRecord
+		data.UserDefinedFields = hrProperties.UserDefinedFields
+
+		return d
+	})...)
+
+	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	tflog.Debug(ctx, fmt.Sprintf("Attempting to update HostRecord with properties: %s", properties))
-
-	update := gobam.APIEntity{
-		Id:         &id,
-		Name:       data.Name.ValueStringPointer(),
-		Properties: &properties,
-		Type:       state.Type.ValueStringPointer(),
-	}
-
-	err = client.Update(&update)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Host Record Update failed", err.Error())
-		return
-	}
-
-	entity, err := client.GetEntityById(id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to get host record by Id after update",
-			err.Error(),
-		)
-		return
-	}
-
-	data.Name = types.StringPointerValue(entity.Name)
-	data.Properties = types.StringPointerValue(entity.Properties)
-	data.Type = types.StringPointerValue(entity.Type)
-
-	hrProperties, diag := flattenHostRecordProperties(entity)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-
-	data.AbsoluteName = hrProperties.AbsoluteName
-	data.Addresses = hrProperties.Addresses
-	data.AddressIDs = hrProperties.AddressIDs
-	data.TTL = hrProperties.TTL
-	data.ReverseRecord = hrProperties.ReverseRecord
-	data.UserDefinedFields = hrProperties.UserDefinedFields
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -444,40 +443,33 @@ func (r *HostRecordResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	client, diag := clientLogin(ctx, r.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
+	resp.Diagnostics.Append(withClient(ctx, r.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var d diag.Diagnostics
 
-	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
-		return
-	}
+		id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+		if err != nil {
+			d.AddError("Failed to parse ID", err.Error())
+			return d
+		}
 
-	entity, err := client.GetEntityById(id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to get host record by id", err.Error())
-		return
-	}
+		entity, err := client.GetEntityById(id)
+		if err != nil {
+			d.AddError("Failed to get host record by id", err.Error())
+			return d
+		}
 
-	if *entity.Id == 0 {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		if *entity.Id == 0 {
+			return d
+		}
 
-		return
-	}
+		err = client.Delete(id)
+		if err != nil {
+			d.AddError("Host Record Delete failed", err.Error())
+			return d
+		}
 
-	err = client.Delete(id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Host Record Delete failed", err.Error())
-		return
-	}
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		return d
+	})...)
 }
 
 func (r *HostRecordResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

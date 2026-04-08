@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -18,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/umich-vci/gobam"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -130,146 +132,133 @@ func (r *IP4AvailableNetworkResource) Create(ctx context.Context, req resource.C
 		return
 	}
 
-	client, diag := clientLogin(ctx, r.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-
 	result := int64(-1)
 
-	networkIDList := make([]int64, 0, len(data.NetworkIDList.Elements()))
-	diag = data.NetworkIDList.ElementsAs(ctx, &networkIDList, false)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		resp.Diagnostics.AddError(
-			"Parsing network ids failed",
-			"",
-		)
-		return
-	}
+	resp.Diagnostics.Append(withClient(ctx, r.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var d diag.Diagnostics
 
-	seed := data.Seed.ValueString()
-	random := data.Random.ValueBool()
+		networkIDList := make([]int64, 0, len(data.NetworkIDList.Elements()))
+		diag := data.NetworkIDList.ElementsAs(ctx, &networkIDList, false)
+		if diag.HasError() {
+			d.Append(diag...)
+			d.AddError(
+				"Parsing network ids failed",
+				"",
+			)
+			return d
+		}
 
-	if len(networkIDList) == 0 {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"network_id_list cannot be empty",
-			"",
-		)
+		seed := data.Seed.ValueString()
+		random := data.Random.ValueBool()
 
-		return
-	}
+		if len(networkIDList) == 0 {
+			d.AddError(
+				"network_id_list cannot be empty",
+				"",
+			)
+			return d
+		}
 
-	if random {
-		rand := NewRand(seed)
+		if random {
+			rand := NewRand(seed)
 
-		perm := rand.Perm(len(networkIDList))
+			perm := rand.Perm(len(networkIDList))
 
-		for _, i := range perm {
-			id := networkIDList[i]
+			for _, i := range perm {
+				id := networkIDList[i]
 
-			entity, err := client.GetEntityById(id)
-			if err != nil {
-				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-				resp.Diagnostics.AddError(
-					"Failed to get IP4 Network by Id",
-					err.Error(),
-				)
+				entity, err := client.GetEntityById(id)
+				if err != nil {
+					d.AddError(
+						"Failed to get IP4 Network by Id",
+						err.Error(),
+					)
+					return d
+				}
 
-				return
+				networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
+				if diag.HasError() {
+					d.Append(diag...)
+					return d
+				}
+
+				_, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
+				if err != nil {
+					d.AddError(
+						"Error calculating network usage",
+						err.Error(),
+					)
+					return d
+				}
+
+				if addressesFree > 0 {
+					result = networkIDList[i]
+					break
+				}
 			}
 
-			networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
-			if diag.HasError() {
-				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-				resp.Diagnostics.Append(diag...)
-				return
+		} else {
+
+			freeAddressMap := make(map[int64]int64)
+			for i := range networkIDList {
+				id := networkIDList[i]
+
+				entity, err := client.GetEntityById(id)
+				if err != nil {
+					d.AddError(
+						"Failed to get IP4 Network by Id",
+						err.Error(),
+					)
+					return d
+				}
+
+				networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
+				if diag.HasError() {
+					d.Append(diag...)
+					return d
+				}
+
+				_, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
+				if err != nil {
+					d.AddError(
+						"Error calculating network usage",
+						err.Error(),
+					)
+					return d
+				}
+
+				if addressesFree > 0 {
+					freeAddressMap[id] = addressesFree
+				}
+
 			}
 
-			_, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
-			if err != nil {
-				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-				resp.Diagnostics.AddError(
-					"Error calculating network usage",
-					err.Error(),
-				)
-
-				return
-			}
-
-			if addressesFree > 0 {
-				result = networkIDList[i]
-				break
+			freeCount := int64(0)
+			for k, v := range freeAddressMap {
+				if v > freeCount {
+					freeCount = v
+					result = k
+				}
 			}
 		}
 
-	} else {
-
-		freeAddressMap := make(map[int64]int64)
-		for i := range networkIDList {
-			id := networkIDList[i]
-
-			entity, err := client.GetEntityById(id)
-			if err != nil {
-				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-				resp.Diagnostics.AddError(
-					"Failed to get IP4 Network by Id",
-					err.Error(),
-				)
-
-				return
-			}
-
-			networkProperties, diag := parseIP4NetworkProperties(*entity.Properties)
-			if diag.HasError() {
-				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-				resp.Diagnostics.Append(diag...)
-				return
-			}
-
-			_, addressesFree, err := getIP4NetworkAddressUsage(*entity.Id, networkProperties.cidr.ValueString(), client)
-			if err != nil {
-				resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-				resp.Diagnostics.AddError(
-					"Error calculating network usage",
-					err.Error(),
-				)
-
-				return
-			}
-
-			if addressesFree > 0 {
-				freeAddressMap[id] = addressesFree
-			}
-
+		if result == -1 {
+			d.AddError(
+				"No networks had a free address",
+				"",
+			)
+			return d
 		}
 
-		freeCount := int64(0)
-		for k, v := range freeAddressMap {
-			if v > freeCount {
-				freeCount = v
-				result = k
-			}
-		}
-	}
+		data.ID = types.StringValue("-")
+		data.NetworkID = types.Int64Value(result)
 
-	if result == -1 {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"No networks had a free address",
-			"",
-		)
+		return d
+	})...)
 
+	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	data.ID = types.StringValue("-")
-	data.NetworkID = types.Int64Value(result)
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log

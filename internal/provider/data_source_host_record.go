@@ -8,8 +8,10 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/umich-vci/gobam"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -135,90 +137,87 @@ func (d *HostRecordDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	client, diag := clientLogin(ctx, d.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
+	resp.Diagnostics.Append(withClient(ctx, d.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var diags diag.Diagnostics
 
-	start := 0
-	count := 10
-	absoluteName := data.AbsoluteName.ValueString()
-	options := fmt.Sprintf("hint=^%s$|retrieveFields=true", absoluteName)
+		start := 0
+		count := 10
+		absoluteName := data.AbsoluteName.ValueString()
+		options := fmt.Sprintf("hint=^%s$|retrieveFields=true", absoluteName)
 
-	hostRecords, err := client.GetHostRecordsByHint(start, count, options)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to get Host Records by hint", err.Error())
+		hostRecords, err := client.GetHostRecordsByHint(start, count, options)
+		if err != nil {
+			diags.AddError("Failed to get Host Records by hint", err.Error())
+			return diags
+		}
 
-		return
-	}
+		resultCount := len(hostRecords.Item)
 
-	resultCount := len(hostRecords.Item)
+		if resultCount == 0 {
+			diags.AddError(
+				"No host records returned by GetHostRecordsByHint",
+				fmt.Sprintf("No host records returned with options: %s", options),
+			)
+			return diags
+		}
 
-	if resultCount == 0 {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"No host records returned by GetHostRecordsByHint",
-			fmt.Sprintf("No host records returned with options: %s", options),
-		)
-		return
-	}
+		tflog.Info(ctx, fmt.Sprintf("GetHostRecordsByHint returned %s results", strconv.Itoa(resultCount)))
 
-	tflog.Info(ctx, fmt.Sprintf("GetHostRecordsByHint returned %s results", strconv.Itoa(resultCount)))
-
-	matches := 0
-	matchLocation := -1
-	for x := range hostRecords.Item {
-		properties := *hostRecords.Item[x].Properties
-		props := strings.Split(properties, "|")
-		for y := range props {
-			if len(props[y]) > 0 {
-				kv := strings.SplitN(props[y], "=", 2)
-				if len(kv) != 2 {
-					continue
-				}
-				prop := kv[0]
-				val := kv[1]
-				if prop == "absoluteName" && val == absoluteName {
-					matches++
-					matchLocation = x
+		matches := 0
+		matchLocation := -1
+		for x := range hostRecords.Item {
+			properties := *hostRecords.Item[x].Properties
+			props := strings.Split(properties, "|")
+			for y := range props {
+				if len(props[y]) > 0 {
+					kv := strings.SplitN(props[y], "=", 2)
+					if len(kv) != 2 {
+						continue
+					}
+					prop := kv[0]
+					val := kv[1]
+					if prop == "absoluteName" && val == absoluteName {
+						matches++
+						matchLocation = x
+					}
 				}
 			}
 		}
-	}
 
-	if matches == 0 || matches > 1 {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"No exact host record match found for hint",
-			fmt.Sprintf("No exact host record match found for hint: %s. Number of matches was: %d", absoluteName, matches),
-		)
+		if matches == 0 || matches > 1 {
+			diags.AddError(
+				"No exact host record match found for hint",
+				fmt.Sprintf("No exact host record match found for hint: %s. Number of matches was: %d", absoluteName, matches),
+			)
+			return diags
+		}
+
+		data.ID = types.StringValue(strconv.FormatInt(*hostRecords.Item[matchLocation].Id, 10))
+		data.Name = types.StringValue(*hostRecords.Item[matchLocation].Name)
+		data.Properties = types.StringValue(*hostRecords.Item[matchLocation].Properties)
+		data.Type = types.StringValue(*hostRecords.Item[matchLocation].Type)
+
+		hostRecordProperties, flattenDiags := flattenHostRecordProperties(hostRecords.Item[matchLocation])
+		if flattenDiags.HasError() {
+			diags.Append(flattenDiags...)
+			return diags
+		}
+
+		data.AbsoluteName = hostRecordProperties.AbsoluteName
+		data.ParentID = hostRecordProperties.ParentID
+		data.ParentType = hostRecordProperties.ParentType
+		data.ReverseRecord = hostRecordProperties.ReverseRecord
+		data.Addresses = hostRecordProperties.Addresses
+		data.AddressIDs = hostRecordProperties.AddressIDs
+		data.UserDefinedFields = hostRecordProperties.UserDefinedFields
+		data.TTL = hostRecordProperties.TTL
+
+		return diags
+	})...)
+
+	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	data.ID = types.StringValue(strconv.FormatInt(*hostRecords.Item[matchLocation].Id, 10))
-	data.Name = types.StringValue(*hostRecords.Item[matchLocation].Name)
-	data.Properties = types.StringValue(*hostRecords.Item[matchLocation].Properties)
-	data.Type = types.StringValue(*hostRecords.Item[matchLocation].Type)
-
-	hostRecordProperties, diag := flattenHostRecordProperties(hostRecords.Item[matchLocation])
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		return
-	}
-
-	data.AbsoluteName = hostRecordProperties.AbsoluteName
-	data.ParentID = hostRecordProperties.ParentID
-	data.ParentType = hostRecordProperties.ParentType
-	data.ReverseRecord = hostRecordProperties.ReverseRecord
-	data.Addresses = hostRecordProperties.Addresses
-	data.AddressIDs = hostRecordProperties.AddressIDs
-	data.UserDefinedFields = hostRecordProperties.UserDefinedFields
-	data.TTL = hostRecordProperties.TTL
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log

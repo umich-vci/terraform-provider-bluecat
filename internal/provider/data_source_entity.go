@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -102,35 +103,33 @@ func (d *entityDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
-	client, diag := clientLogin(ctx, d.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-
 	parentID := data.ParentID.ValueInt64()
-
 	name := data.Name.ValueString()
 	objType := data.Type.ValueString()
 
-	entity, err := client.GetEntityByName(parentID, name, objType)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to get entity by name", err.Error())
+	resp.Diagnostics.Append(withClient(ctx, d.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var diags diag.Diagnostics
+
+		entity, err := client.GetEntityByName(parentID, name, objType)
+		if err != nil {
+			diags.AddError("Failed to get entity by name", err.Error())
+			return diags
+		}
+
+		if *entity.Id == 0 {
+			diags.AddError("Entity not found", "Entity ID returned was 0")
+			return diags
+		}
+
+		data.Id = types.StringValue(strconv.FormatInt(*entity.Id, 10))
+		data.Properties = types.StringValue(*entity.Properties)
+
+		return diags
+	})...)
+
+	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	if *entity.Id == 0 {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Entity not found", "Entity ID returned was 0")
-
-		return
-	}
-
-	data.Id = types.StringValue(strconv.FormatInt(*entity.Id, 10))
-	data.Properties = types.StringValue(*entity.Properties)
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log

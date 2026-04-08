@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -291,163 +292,160 @@ func (r *IP4NetworkResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	client, diag := clientLogin(ctx, r.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
+	resp.Diagnostics.Append(withClient(ctx, r.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var d diag.Diagnostics
+
+		parentID := data.ParentID.ValueInt64()
+		size := data.Size.ValueInt64()
+		isLargerAllowed := data.IsLargerAllowed.ValueBool()
+		traversalMethod := data.TraversalMethod.ValueString()
+		autoCreate := true     //we always want to create since this is a resource after all
+		reuseExisting := false //we never want to use an existing network created outside terraform
+		Type := "IP4Network"   //Since this is the ip4_network resource we are setting the type
+		properties := "reuseExisting=" + strconv.FormatBool(reuseExisting) + "|"
+		properties = properties + "isLargerAllowed=" + strconv.FormatBool(isLargerAllowed) + "|"
+		properties = properties + "autoCreate=" + strconv.FormatBool(autoCreate) + "|"
+		properties = properties + "traversalMethod=" + traversalMethod + "|"
+
+		network, err := client.GetNextAvailableIPRange(parentID, size, Type, properties)
+		if err != nil {
+			d.AddError(
+				"Failed to create IP4 Network",
+				err.Error(),
+			)
+			return d
+		}
+
+		data.ID = types.StringValue(strconv.FormatInt(*network.Id, 10))
+		data.Properties = types.StringPointerValue(network.Properties)
+		data.Type = types.StringPointerValue(network.Type)
+
+		// we have an ID at this point so save the state
+		d.Append(resp.State.Set(ctx, &data)...)
+
+		properties = ""
+
+		if !data.Gateway.IsUnknown() {
+			properties = properties + "gateway=" + data.Gateway.ValueString() + "|"
+		}
+
+		if !data.DefaultDomains.IsUnknown() {
+			var defaultDomains []string
+			data.DefaultDomains.ElementsAs(ctx, &defaultDomains, false)
+			properties = properties + "defaultDomains=" + strings.Join(defaultDomains, ",") + "|"
+		}
+
+		if !data.DefaultView.IsUnknown() {
+			properties = properties + "defaultView=" + strconv.FormatInt(data.DefaultView.ValueInt64(), 10) + "|"
+		}
+
+		if !data.DNSRestrictions.IsUnknown() {
+			var dnsRestrictions []string
+			data.DNSRestrictions.ElementsAs(ctx, &dnsRestrictions, false)
+			properties = properties + "dnsRestrictions=" + strings.Join(dnsRestrictions, ",") + "|"
+		}
+
+		if !data.AllowDuplicateHost.IsUnknown() {
+			properties = properties + "allowDuplicateHost=" + boolToEnableDisable(data.AllowDuplicateHost.ValueBoolPointer()) + "|"
+		}
+
+		if !data.PingBeforeAssign.IsUnknown() {
+			properties = properties + "pingBeforeAssign=" + boolToEnableDisable(data.PingBeforeAssign.ValueBoolPointer()) + "|"
+		}
+
+		if !data.InheritAllowDuplicateHost.IsUnknown() {
+			properties = properties + "inheritAllowDuplicateHost=" + strconv.FormatBool(data.InheritAllowDuplicateHost.ValueBool()) + "|"
+		}
+
+		if !data.InheritPingBeforeAssign.IsUnknown() {
+			properties = properties + "inheritPingBeforeAssign=" + strconv.FormatBool(data.InheritPingBeforeAssign.ValueBool()) + "|"
+		}
+
+		if !data.InheritDNSRestrictions.IsUnknown() {
+			properties = properties + "inheritDNSRestrictions=" + strconv.FormatBool(data.InheritDNSRestrictions.ValueBool()) + "|"
+		}
+
+		if !data.InheritDefaultDomains.IsUnknown() {
+			properties = properties + "inheritDefaultDomains=" + strconv.FormatBool(data.InheritDefaultDomains.ValueBool()) + "|"
+		}
+
+		if !data.InheritDefaultView.IsUnknown() {
+			properties = properties + "inheritDefaultView=" + strconv.FormatBool(data.InheritDefaultView.ValueBool()) + "|"
+		}
+
+		if !data.LocationCode.IsUnknown() {
+			properties = properties + "locationCode=" + data.LocationCode.ValueString() + "|"
+		}
+
+		if !data.DynamicUpdate.IsUnknown() {
+			properties = properties + "dynamicUpdate=" + strconv.FormatBool(data.DynamicUpdate.ValueBool()) + "|"
+		}
+
+		var udfs map[string]string
+		data.UserDefinedFields.ElementsAs(ctx, &udfs, false)
+		for k, v := range udfs {
+			properties = properties + k + "=" + v + "|"
+		}
+
+		setName := gobam.APIEntity{
+			Id:         network.Id,
+			Name:       data.Name.ValueStringPointer(),
+			Properties: &properties,
+			Type:       data.Type.ValueStringPointer(),
+		}
+
+		err = client.Update(&setName)
+		if err != nil {
+			d.AddError(
+				"Failed to update created IP4 Network",
+				err.Error(),
+			)
+			return d
+		}
+
+		entity, err := client.GetEntityById(*network.Id)
+		if err != nil {
+			d.AddError(
+				"Failed to get IP4 Network by Id",
+				err.Error(),
+			)
+			return d
+		}
+
+		networkProperties, diags := flattenIP4NetworkProperties(entity)
+		if diags.HasError() {
+			d.Append(diags...)
+			return d
+		}
+
+		data.Name = types.StringPointerValue(entity.Name)
+		data.Properties = types.StringPointerValue(entity.Properties)
+		data.Type = types.StringPointerValue(entity.Type)
+		data.CIDR = networkProperties.CIDR
+		data.Template = networkProperties.Template
+		data.Gateway = networkProperties.Gateway
+		data.DefaultDomains = networkProperties.DefaultDomains
+		data.DefaultView = networkProperties.DefaultView
+		data.DNSRestrictions = networkProperties.DNSRestrictions
+		data.AllowDuplicateHost = networkProperties.AllowDuplicateHost
+		data.PingBeforeAssign = networkProperties.PingBeforeAssign
+		data.InheritAllowDuplicateHost = networkProperties.InheritAllowDuplicateHost
+		data.InheritPingBeforeAssign = networkProperties.InheritPingBeforeAssign
+		data.InheritDNSRestrictions = networkProperties.InheritDNSRestrictions
+		data.InheritDefaultDomains = networkProperties.InheritDefaultDomains
+		data.InheritDefaultView = networkProperties.InheritDefaultView
+		data.LocationCode = networkProperties.LocationCode
+		data.LocationInherited = networkProperties.LocationInherited
+		data.SharedNetwork = networkProperties.SharedNetwork
+		data.UserDefinedFields = networkProperties.UserDefinedFields
+		data.DynamicUpdate = networkProperties.DynamicUpdate
+
+		return d
+	})...)
+
+	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	parentID := data.ParentID.ValueInt64()
-	size := data.Size.ValueInt64()
-	isLargerAllowed := data.IsLargerAllowed.ValueBool()
-	traversalMethod := data.TraversalMethod.ValueString()
-	autoCreate := true     //we always want to create since this is a resource after all
-	reuseExisting := false //we never want to use an existing network created outside terraform
-	Type := "IP4Network"   //Since this is the ip4_network resource we are setting the type
-	properties := "reuseExisting=" + strconv.FormatBool(reuseExisting) + "|"
-	properties = properties + "isLargerAllowed=" + strconv.FormatBool(isLargerAllowed) + "|"
-	properties = properties + "autoCreate=" + strconv.FormatBool(autoCreate) + "|"
-	properties = properties + "traversalMethod=" + traversalMethod + "|"
-
-	network, err := client.GetNextAvailableIPRange(parentID, size, Type, properties)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to create IP4 Network",
-			err.Error(),
-		)
-		return
-	}
-
-	data.ID = types.StringValue(strconv.FormatInt(*network.Id, 10))
-	data.Properties = types.StringPointerValue(network.Properties)
-	data.Type = types.StringPointerValue(network.Type)
-
-	// we have an ID at this point so save the state
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-
-	properties = ""
-
-	if !data.Gateway.IsUnknown() {
-		properties = properties + "gateway=" + data.Gateway.ValueString() + "|"
-	}
-
-	if !data.DefaultDomains.IsUnknown() {
-		var defaultDomains []string
-		data.DefaultDomains.ElementsAs(ctx, &defaultDomains, false)
-		properties = properties + "defaultDomains=" + strings.Join(defaultDomains, ",") + "|"
-	}
-
-	if !data.DefaultView.IsUnknown() {
-		properties = properties + "defaultView=" + strconv.FormatInt(data.DefaultView.ValueInt64(), 10) + "|"
-	}
-
-	if !data.DNSRestrictions.IsUnknown() {
-		var dnsRestrictions []string
-		data.DNSRestrictions.ElementsAs(ctx, &dnsRestrictions, false)
-		properties = properties + "dnsRestrictions=" + strings.Join(dnsRestrictions, ",") + "|"
-	}
-
-	if !data.AllowDuplicateHost.IsUnknown() {
-		properties = properties + "allowDuplicateHost=" + boolToEnableDisable(data.AllowDuplicateHost.ValueBoolPointer()) + "|"
-	}
-
-	if !data.PingBeforeAssign.IsUnknown() {
-		properties = properties + "pingBeforeAssign=" + boolToEnableDisable(data.PingBeforeAssign.ValueBoolPointer()) + "|"
-	}
-
-	if !data.InheritAllowDuplicateHost.IsUnknown() {
-		properties = properties + "inheritAllowDuplicateHost=" + strconv.FormatBool(data.InheritAllowDuplicateHost.ValueBool()) + "|"
-	}
-
-	if !data.InheritPingBeforeAssign.IsUnknown() {
-		properties = properties + "inheritPingBeforeAssign=" + strconv.FormatBool(data.InheritPingBeforeAssign.ValueBool()) + "|"
-	}
-
-	if !data.InheritDNSRestrictions.IsUnknown() {
-		properties = properties + "inheritDNSRestrictions=" + strconv.FormatBool(data.InheritDNSRestrictions.ValueBool()) + "|"
-	}
-
-	if !data.InheritDefaultDomains.IsUnknown() {
-		properties = properties + "inheritDefaultDomains=" + strconv.FormatBool(data.InheritDefaultDomains.ValueBool()) + "|"
-	}
-
-	if !data.InheritDefaultView.IsUnknown() {
-		properties = properties + "inheritDefaultView=" + strconv.FormatBool(data.InheritDefaultView.ValueBool()) + "|"
-	}
-
-	if !data.LocationCode.IsUnknown() {
-		properties = properties + "locationCode=" + data.LocationCode.ValueString() + "|"
-	}
-
-	if !data.DynamicUpdate.IsUnknown() {
-		properties = properties + "dynamicUpdate=" + strconv.FormatBool(data.DynamicUpdate.ValueBool()) + "|"
-	}
-
-	var udfs map[string]string
-	data.UserDefinedFields.ElementsAs(ctx, &udfs, false)
-	for k, v := range udfs {
-		properties = properties + k + "=" + v + "|"
-	}
-
-	setName := gobam.APIEntity{
-		Id:         network.Id,
-		Name:       data.Name.ValueStringPointer(),
-		Properties: &properties,
-		Type:       data.Type.ValueStringPointer(),
-	}
-
-	err = client.Update(&setName)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to update created IP4 Network",
-			err.Error(),
-		)
-
-		return
-	}
-
-	entity, err := client.GetEntityById(*network.Id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to get IP4 Network by Id",
-			err.Error(),
-		)
-		return
-	}
-
-	networkProperties, diag := flattenIP4NetworkProperties(entity)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-
-	data.Name = types.StringPointerValue(entity.Name)
-	data.Properties = types.StringPointerValue(entity.Properties)
-	data.Type = types.StringPointerValue(entity.Type)
-	data.CIDR = networkProperties.CIDR
-	data.Template = networkProperties.Template
-	data.Gateway = networkProperties.Gateway
-	data.DefaultDomains = networkProperties.DefaultDomains
-	data.DefaultView = networkProperties.DefaultView
-	data.DNSRestrictions = networkProperties.DNSRestrictions
-	data.AllowDuplicateHost = networkProperties.AllowDuplicateHost
-	data.PingBeforeAssign = networkProperties.PingBeforeAssign
-	data.InheritAllowDuplicateHost = networkProperties.InheritAllowDuplicateHost
-	data.InheritPingBeforeAssign = networkProperties.InheritPingBeforeAssign
-	data.InheritDNSRestrictions = networkProperties.InheritDNSRestrictions
-	data.InheritDefaultDomains = networkProperties.InheritDefaultDomains
-	data.InheritDefaultView = networkProperties.InheritDefaultView
-	data.LocationCode = networkProperties.LocationCode
-	data.LocationInherited = networkProperties.LocationInherited
-	data.SharedNetwork = networkProperties.SharedNetwork
-	data.UserDefinedFields = networkProperties.UserDefinedFields
-	data.DynamicUpdate = networkProperties.DynamicUpdate
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
@@ -467,87 +465,89 @@ func (r *IP4NetworkResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	client, diag := clientLogin(ctx, r.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
+	var removeResource bool
+
+	resp.Diagnostics.Append(withClient(ctx, r.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var d diag.Diagnostics
+
+		id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+		if err != nil {
+			d.AddError("Failed to parse ID", err.Error())
+			return d
+		}
+
+		entity, err := client.GetEntityById(id)
+		if err != nil {
+			d.AddError(
+				"Failed to get IP4 Network by Id",
+				err.Error(),
+			)
+			return d
+		}
+
+		if *entity.Id == 0 {
+			removeResource = true
+			return d
+		}
+
+		data.Name = types.StringPointerValue(entity.Name)
+		data.Properties = types.StringPointerValue(entity.Properties)
+		data.Type = types.StringPointerValue(entity.Type)
+
+		networkProperties, diags := flattenIP4NetworkProperties(entity)
+		if diags.HasError() {
+			d.Append(diags...)
+			return d
+		}
+
+		data.CIDR = networkProperties.CIDR
+		data.Template = networkProperties.Template
+		data.Gateway = networkProperties.Gateway
+		data.DefaultDomains = networkProperties.DefaultDomains
+		data.DefaultView = networkProperties.DefaultView
+		data.DNSRestrictions = networkProperties.DNSRestrictions
+		data.AllowDuplicateHost = networkProperties.AllowDuplicateHost
+		data.PingBeforeAssign = networkProperties.PingBeforeAssign
+		data.InheritAllowDuplicateHost = networkProperties.InheritAllowDuplicateHost
+		data.InheritPingBeforeAssign = networkProperties.InheritPingBeforeAssign
+		data.InheritDNSRestrictions = networkProperties.InheritDNSRestrictions
+		data.InheritDefaultDomains = networkProperties.InheritDefaultDomains
+		data.InheritDefaultView = networkProperties.InheritDefaultView
+		data.LocationCode = networkProperties.LocationCode
+		data.LocationInherited = networkProperties.LocationInherited
+		data.SharedNetwork = networkProperties.SharedNetwork
+		data.UserDefinedFields = networkProperties.UserDefinedFields
+		data.DynamicUpdate = networkProperties.DynamicUpdate
+
+		// calculate the size of the network so we can set it in the state so import works
+		cidrNetmask, err := strconv.ParseInt(strings.Split(networkProperties.CIDR.ValueString(), "/")[1], 10, 64)
+		if err != nil {
+			d.AddError("Failed to parse CIDR netmask to integer", err.Error())
+			return d
+		}
+		var size, e = big.NewInt(2), big.NewInt(32 - cidrNetmask)
+		size.Exp(size, e, nil)
+		data.Size = types.Int64Value(size.Int64())
+
+		// get the parent id of the network so we can set it in the state so import works
+		parent, err := client.GetParent(id)
+		if err != nil {
+			d.AddError("Failed to get parent entity of IP4 Network", err.Error())
+			return d
+		}
+		data.ParentID = types.Int64Value(*parent.Id)
+
+		return d
+	})...)
+
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
-		return
-	}
-
-	entity, err := client.GetEntityById(id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to get IP4 Network by Id",
-			err.Error(),
-		)
-		return
-	}
-
-	if *entity.Id == 0 {
-		tflog.Trace(ctx, "IP4 Network was deleted outside terraform")
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+	if removeResource {
 		resp.State.RemoveResource(ctx)
 		return
 	}
-
-	data.Name = types.StringPointerValue(entity.Name)
-	data.Properties = types.StringPointerValue(entity.Properties)
-	data.Type = types.StringPointerValue(entity.Type)
-
-	networkProperties, diag := flattenIP4NetworkProperties(entity)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-
-	data.CIDR = networkProperties.CIDR
-	data.Template = networkProperties.Template
-	data.Gateway = networkProperties.Gateway
-	data.DefaultDomains = networkProperties.DefaultDomains
-	data.DefaultView = networkProperties.DefaultView
-	data.DNSRestrictions = networkProperties.DNSRestrictions
-	data.AllowDuplicateHost = networkProperties.AllowDuplicateHost
-	data.PingBeforeAssign = networkProperties.PingBeforeAssign
-	data.InheritAllowDuplicateHost = networkProperties.InheritAllowDuplicateHost
-	data.InheritPingBeforeAssign = networkProperties.InheritPingBeforeAssign
-	data.InheritDNSRestrictions = networkProperties.InheritDNSRestrictions
-	data.InheritDefaultDomains = networkProperties.InheritDefaultDomains
-	data.InheritDefaultView = networkProperties.InheritDefaultView
-	data.LocationCode = networkProperties.LocationCode
-	data.LocationInherited = networkProperties.LocationInherited
-	data.SharedNetwork = networkProperties.SharedNetwork
-	data.UserDefinedFields = networkProperties.UserDefinedFields
-	data.DynamicUpdate = networkProperties.DynamicUpdate
-
-	// calculate the size of the network so we can set it in the state so import works
-	cidrNetmask, err := strconv.ParseInt(strings.Split(networkProperties.CIDR.ValueString(), "/")[1], 10, 64)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to parse CIDR netmask to integer", err.Error())
-		return
-	}
-	var size, e = big.NewInt(2), big.NewInt(32 - cidrNetmask)
-	size.Exp(size, e, nil)
-	data.Size = types.Int64Value(size.Int64())
-
-	// get the parent id of the network so we can set it in the state so import works
-	parent, err := client.GetParent(id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to get parent entity of IP4 Network", err.Error())
-		return
-	}
-	data.ParentID = types.Int64Value(*parent.Id)
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -565,165 +565,163 @@ func (r *IP4NetworkResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	client, diag := clientLogin(ctx, r.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
+	resp.Diagnostics.Append(withClient(ctx, r.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var d diag.Diagnostics
 
-	properties := ""
+		properties := ""
 
-	if !data.Gateway.IsUnknown() && !data.Gateway.Equal(state.Gateway) {
-		properties = properties + fmt.Sprintf("gateway=%s|", data.Gateway.ValueString())
-	}
-
-	if !data.DefaultDomains.IsUnknown() && !data.DefaultDomains.Equal(state.DefaultDomains) {
-		var domains []string
-		data.DefaultDomains.ElementsAs(ctx, &domains, false)
-		if domains != nil {
-			properties = properties + fmt.Sprintf("defaultDomains=%s|", strings.Join(domains, ","))
-		}
-	}
-
-	if !data.DefaultView.IsUnknown() && !data.DefaultView.Equal(state.DefaultView) {
-
-		properties = properties + fmt.Sprintf("defaultView=%s|", strconv.FormatInt(data.DefaultView.ValueInt64(), 10))
-
-	}
-
-	if !data.DNSRestrictions.IsUnknown() && !data.DNSRestrictions.Equal(state.DNSRestrictions) {
-		var dns []string
-		data.DNSRestrictions.ElementsAs(ctx, &dns, false)
-		if dns != nil {
-			properties = properties + fmt.Sprintf("dnsRestrictions=%s|", strings.Join(dns, ","))
+		if !data.Gateway.IsUnknown() && !data.Gateway.Equal(state.Gateway) {
+			properties = properties + fmt.Sprintf("gateway=%s|", data.Gateway.ValueString())
 		}
 
-	}
-
-	if !data.AllowDuplicateHost.IsUnknown() && !data.AllowDuplicateHost.Equal(state.AllowDuplicateHost) {
-		properties = properties + fmt.Sprintf("allowDuplicateHost=%s|", boolToEnableDisable(data.AllowDuplicateHost.ValueBoolPointer()))
-
-	}
-
-	if !data.PingBeforeAssign.IsUnknown() && !data.PingBeforeAssign.Equal(state.PingBeforeAssign) {
-		properties = properties + fmt.Sprintf("pingBeforeAssign=%s|", boolToEnableDisable(data.PingBeforeAssign.ValueBoolPointer()))
-	}
-
-	if !data.InheritAllowDuplicateHost.Equal(state.InheritAllowDuplicateHost) {
-		properties = properties + fmt.Sprintf("inheritAllowDuplicateHost=%s|", strconv.FormatBool(data.InheritAllowDuplicateHost.ValueBool()))
-	}
-
-	if !data.InheritPingBeforeAssign.Equal(state.InheritPingBeforeAssign) {
-		properties = properties + fmt.Sprintf("inheritPingBeforeAssign=%s|", strconv.FormatBool(data.InheritPingBeforeAssign.ValueBool()))
-	}
-
-	if !data.InheritDNSRestrictions.Equal(state.InheritDNSRestrictions) {
-		properties = properties + fmt.Sprintf("inheritDNSRestrictions=%s|", strconv.FormatBool(data.InheritDNSRestrictions.ValueBool()))
-	}
-
-	if !data.InheritDefaultDomains.Equal(state.InheritDefaultDomains) {
-		properties = properties + fmt.Sprintf("inheritDefaultDomains=%s|", strconv.FormatBool(data.InheritDefaultDomains.ValueBool()))
-
-	}
-
-	if !data.InheritDefaultView.Equal(state.InheritDefaultView) {
-		properties = properties + fmt.Sprintf("inheritDefaultView=%s|", strconv.FormatBool(data.InheritDefaultView.ValueBool()))
-	}
-
-	if !data.LocationCode.IsUnknown() && !data.LocationCode.Equal(state.LocationCode) {
-		properties = properties + fmt.Sprintf("locationCode=%s|", data.LocationCode.ValueString())
-	}
-
-	if !data.DynamicUpdate.IsUnknown() && !data.DynamicUpdate.Equal(state.DynamicUpdate) {
-		properties = properties + fmt.Sprintf("dynamicUpdate=%s|", strconv.FormatBool(data.DynamicUpdate.ValueBool()))
-	}
-
-	if !data.UserDefinedFields.Equal(state.UserDefinedFields) {
-		var udfs, oldudfs map[string]string
-		resp.Diagnostics.Append(data.UserDefinedFields.ElementsAs(ctx, &udfs, false)...)
-		resp.Diagnostics.Append(state.UserDefinedFields.ElementsAs(ctx, &oldudfs, false)...)
-
-		for k, v := range udfs {
-			properties = properties + fmt.Sprintf("%s=%s|", k, v)
-		}
-
-		// set keys that no longer exist to empty string
-		oldkeys := maps.Keys(oldudfs)
-		keys := maps.Keys(udfs)
-		for _, x := range oldkeys {
-			if !slices.Contains(keys, x) {
-				properties = properties + fmt.Sprintf("%s=|", x)
+		if !data.DefaultDomains.IsUnknown() && !data.DefaultDomains.Equal(state.DefaultDomains) {
+			var domains []string
+			data.DefaultDomains.ElementsAs(ctx, &domains, false)
+			if domains != nil {
+				properties = properties + fmt.Sprintf("defaultDomains=%s|", strings.Join(domains, ","))
 			}
 		}
-	}
 
-	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
+		if !data.DefaultView.IsUnknown() && !data.DefaultView.Equal(state.DefaultView) {
+
+			properties = properties + fmt.Sprintf("defaultView=%s|", strconv.FormatInt(data.DefaultView.ValueInt64(), 10))
+
+		}
+
+		if !data.DNSRestrictions.IsUnknown() && !data.DNSRestrictions.Equal(state.DNSRestrictions) {
+			var dns []string
+			data.DNSRestrictions.ElementsAs(ctx, &dns, false)
+			if dns != nil {
+				properties = properties + fmt.Sprintf("dnsRestrictions=%s|", strings.Join(dns, ","))
+			}
+
+		}
+
+		if !data.AllowDuplicateHost.IsUnknown() && !data.AllowDuplicateHost.Equal(state.AllowDuplicateHost) {
+			properties = properties + fmt.Sprintf("allowDuplicateHost=%s|", boolToEnableDisable(data.AllowDuplicateHost.ValueBoolPointer()))
+
+		}
+
+		if !data.PingBeforeAssign.IsUnknown() && !data.PingBeforeAssign.Equal(state.PingBeforeAssign) {
+			properties = properties + fmt.Sprintf("pingBeforeAssign=%s|", boolToEnableDisable(data.PingBeforeAssign.ValueBoolPointer()))
+		}
+
+		if !data.InheritAllowDuplicateHost.Equal(state.InheritAllowDuplicateHost) {
+			properties = properties + fmt.Sprintf("inheritAllowDuplicateHost=%s|", strconv.FormatBool(data.InheritAllowDuplicateHost.ValueBool()))
+		}
+
+		if !data.InheritPingBeforeAssign.Equal(state.InheritPingBeforeAssign) {
+			properties = properties + fmt.Sprintf("inheritPingBeforeAssign=%s|", strconv.FormatBool(data.InheritPingBeforeAssign.ValueBool()))
+		}
+
+		if !data.InheritDNSRestrictions.Equal(state.InheritDNSRestrictions) {
+			properties = properties + fmt.Sprintf("inheritDNSRestrictions=%s|", strconv.FormatBool(data.InheritDNSRestrictions.ValueBool()))
+		}
+
+		if !data.InheritDefaultDomains.Equal(state.InheritDefaultDomains) {
+			properties = properties + fmt.Sprintf("inheritDefaultDomains=%s|", strconv.FormatBool(data.InheritDefaultDomains.ValueBool()))
+
+		}
+
+		if !data.InheritDefaultView.Equal(state.InheritDefaultView) {
+			properties = properties + fmt.Sprintf("inheritDefaultView=%s|", strconv.FormatBool(data.InheritDefaultView.ValueBool()))
+		}
+
+		if !data.LocationCode.IsUnknown() && !data.LocationCode.Equal(state.LocationCode) {
+			properties = properties + fmt.Sprintf("locationCode=%s|", data.LocationCode.ValueString())
+		}
+
+		if !data.DynamicUpdate.IsUnknown() && !data.DynamicUpdate.Equal(state.DynamicUpdate) {
+			properties = properties + fmt.Sprintf("dynamicUpdate=%s|", strconv.FormatBool(data.DynamicUpdate.ValueBool()))
+		}
+
+		if !data.UserDefinedFields.Equal(state.UserDefinedFields) {
+			var udfs, oldudfs map[string]string
+			d.Append(data.UserDefinedFields.ElementsAs(ctx, &udfs, false)...)
+			d.Append(state.UserDefinedFields.ElementsAs(ctx, &oldudfs, false)...)
+
+			for k, v := range udfs {
+				properties = properties + fmt.Sprintf("%s=%s|", k, v)
+			}
+
+			// set keys that no longer exist to empty string
+			oldkeys := maps.Keys(oldudfs)
+			keys := maps.Keys(udfs)
+			for _, x := range oldkeys {
+				if !slices.Contains(keys, x) {
+					properties = properties + fmt.Sprintf("%s=|", x)
+				}
+			}
+		}
+
+		id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+		if err != nil {
+			d.AddError("Failed to parse ID", err.Error())
+			return d
+		}
+
+		update := gobam.APIEntity{
+			Id:         &id,
+			Name:       data.Name.ValueStringPointer(),
+			Properties: &properties,
+			Type:       state.Type.ValueStringPointer(),
+		}
+
+		tflog.Debug(ctx, fmt.Sprintf("Attempting to update IP4Network with properties: %s", properties))
+
+		err = client.Update(&update)
+		if err != nil {
+			d.AddError(
+				"IP4 Network Update failed",
+				err.Error(),
+			)
+			return d
+		}
+
+		entity, err := client.GetEntityById(id)
+		if err != nil {
+			d.AddError(
+				"Failed to get IP4 Network by Id",
+				err.Error(),
+			)
+			return d
+		}
+
+		data.Name = types.StringPointerValue(entity.Name)
+		data.Properties = types.StringPointerValue(entity.Properties)
+		data.Type = types.StringPointerValue(entity.Type)
+
+		networkProperties, diags := flattenIP4NetworkProperties(entity)
+		if diags.HasError() {
+			d.Append(diags...)
+			return d
+		}
+
+		data.CIDR = networkProperties.CIDR
+		data.Template = networkProperties.Template
+		data.Gateway = networkProperties.Gateway
+		data.DefaultDomains = networkProperties.DefaultDomains
+		data.DefaultView = networkProperties.DefaultView
+		data.DNSRestrictions = networkProperties.DNSRestrictions
+		data.AllowDuplicateHost = networkProperties.AllowDuplicateHost
+		data.PingBeforeAssign = networkProperties.PingBeforeAssign
+		data.InheritAllowDuplicateHost = networkProperties.InheritAllowDuplicateHost
+		data.InheritPingBeforeAssign = networkProperties.InheritPingBeforeAssign
+		data.InheritDNSRestrictions = networkProperties.InheritDNSRestrictions
+		data.InheritDefaultDomains = networkProperties.InheritDefaultDomains
+		data.InheritDefaultView = networkProperties.InheritDefaultView
+		data.LocationCode = networkProperties.LocationCode
+		data.LocationInherited = networkProperties.LocationInherited
+		data.SharedNetwork = networkProperties.SharedNetwork
+		data.DynamicUpdate = networkProperties.DynamicUpdate
+		data.UserDefinedFields = networkProperties.UserDefinedFields
+
+		return d
+	})...)
+
+	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	update := gobam.APIEntity{
-		Id:         &id,
-		Name:       data.Name.ValueStringPointer(),
-		Properties: &properties,
-		Type:       state.Type.ValueStringPointer(),
-	}
-
-	tflog.Debug(ctx, fmt.Sprintf("Attempting to update IP4Network with properties: %s", properties))
-
-	err = client.Update(&update)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"IP4 Network Update failed",
-			err.Error(),
-		)
-		return
-	}
-
-	entity, err := client.GetEntityById(id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to get IP4 Network by Id",
-			err.Error(),
-		)
-		return
-	}
-
-	data.Name = types.StringPointerValue(entity.Name)
-	data.Properties = types.StringPointerValue(entity.Properties)
-	data.Type = types.StringPointerValue(entity.Type)
-
-	networkProperties, diag := flattenIP4NetworkProperties(entity)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
-
-	data.CIDR = networkProperties.CIDR
-	data.Template = networkProperties.Template
-	data.Gateway = networkProperties.Gateway
-	data.DefaultDomains = networkProperties.DefaultDomains
-	data.DefaultView = networkProperties.DefaultView
-	data.DNSRestrictions = networkProperties.DNSRestrictions
-	data.AllowDuplicateHost = networkProperties.AllowDuplicateHost
-	data.PingBeforeAssign = networkProperties.PingBeforeAssign
-	data.InheritAllowDuplicateHost = networkProperties.InheritAllowDuplicateHost
-	data.InheritPingBeforeAssign = networkProperties.InheritPingBeforeAssign
-	data.InheritDNSRestrictions = networkProperties.InheritDNSRestrictions
-	data.InheritDefaultDomains = networkProperties.InheritDefaultDomains
-	data.InheritDefaultView = networkProperties.InheritDefaultView
-	data.LocationCode = networkProperties.LocationCode
-	data.LocationInherited = networkProperties.LocationInherited
-	data.SharedNetwork = networkProperties.SharedNetwork
-	data.DynamicUpdate = networkProperties.DynamicUpdate
-	data.UserDefinedFields = networkProperties.UserDefinedFields
-
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -739,45 +737,39 @@ func (r *IP4NetworkResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	client, diag := clientLogin(ctx, r.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
+	resp.Diagnostics.Append(withClient(ctx, r.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var d diag.Diagnostics
 
-	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to parse ID", err.Error())
-		return
-	}
+		id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+		if err != nil {
+			d.AddError("Failed to parse ID", err.Error())
+			return d
+		}
 
-	entity, err := client.GetEntityById(id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Failed to get IP4 Network by Id",
-			err.Error(),
-		)
-		return
-	}
+		entity, err := client.GetEntityById(id)
+		if err != nil {
+			d.AddError(
+				"Failed to get IP4 Network by Id",
+				err.Error(),
+			)
+			return d
+		}
 
-	if *entity.Id == 0 {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		return
-	}
+		if *entity.Id == 0 {
+			return d
+		}
 
-	err = client.Delete(id)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError(
-			"Delete failed",
-			err.Error(),
-		)
-		return
-	}
+		err = client.Delete(id)
+		if err != nil {
+			d.AddError(
+				"Delete failed",
+				err.Error(),
+			)
+			return d
+		}
 
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		return d
+	})...)
 }
 
 func (r *IP4NetworkResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

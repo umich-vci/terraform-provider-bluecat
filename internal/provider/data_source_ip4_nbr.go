@@ -205,63 +205,58 @@ func (d *IP4NBRDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
-	client, diag := clientLogin(ctx, d.client, mutex)
-	if diag.HasError() {
-		resp.Diagnostics.Append(diag...)
-		return
-	}
+	resp.Diagnostics.Append(withClient(ctx, d.client, func(client gobam.ProteusAPI) diag.Diagnostics {
+		var diags diag.Diagnostics
 
-	containerID := data.ContainerID.ValueInt64()
-	otype := data.Type.ValueString()
-	address := data.Address.ValueString()
+		containerID := data.ContainerID.ValueInt64()
+		otype := data.Type.ValueString()
+		address := data.Address.ValueString()
 
-	ipRange, err := client.GetIPRangedByIP(containerID, otype, address)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Failed to get IP4 Networks by hint", err.Error())
-		return
-	}
+		ipRange, err := client.GetIPRangedByIP(containerID, otype, address)
+		if err != nil {
+			diags.AddError("Failed to get IP4 Networks by hint", err.Error())
+			return diags
+		}
 
-	data.ID = types.StringValue(strconv.FormatInt(*ipRange.Id, 10))
-	data.Name = types.StringPointerValue(ipRange.Name)
-	data.Properties = types.StringPointerValue(ipRange.Properties)
-	data.Type = types.StringPointerValue(ipRange.Type)
+		data.ID = types.StringValue(strconv.FormatInt(*ipRange.Id, 10))
+		data.Name = types.StringPointerValue(ipRange.Name)
+		data.Properties = types.StringPointerValue(ipRange.Properties)
+		data.Type = types.StringPointerValue(ipRange.Type)
 
-	tflog.Info(ctx, fmt.Sprintf("parsing properties: %s", *ipRange.Properties))
-	networkProperties, diag := parseIP4NetworkProperties(*ipRange.Properties)
-	if diag.HasError() {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.Append(diag...)
-		return
-	}
+		tflog.Info(ctx, fmt.Sprintf("parsing properties: %s", *ipRange.Properties))
+		networkProperties, parseDiags := parseIP4NetworkProperties(*ipRange.Properties)
+		if parseDiags.HasError() {
+			diags.Append(parseDiags...)
+			return diags
+		}
 
-	data.CIDR = networkProperties.cidr
-	data.Template = networkProperties.template
-	data.Gateway = networkProperties.gateway
-	data.DefaultDomains = networkProperties.defaultDomains
-	data.DefaultView = networkProperties.defaultView
-	data.DNSRestrictions = networkProperties.dnsRestrictions
-	data.AllowDuplicateHost = networkProperties.allowDuplicateHost
-	data.PingBeforeAssign = networkProperties.pingBeforeAssign
-	data.InheritAllowDuplicateHost = networkProperties.inheritAllowDuplicateHost
-	data.InheritPingBeforeAssign = networkProperties.inheritPingBeforeAssign
-	data.InheritDNSRestrictions = networkProperties.inheritDNSRestrictions
-	data.InheritDefaultDomains = networkProperties.inheritDefaultDomains
-	data.InheritDefaultView = networkProperties.inheritDefaultView
-	data.LocationCode = networkProperties.locationCode
-	data.LocationInherited = networkProperties.locationInherited
-	data.CustomProperties = networkProperties.customProperties
+		data.CIDR = networkProperties.cidr
+		data.Template = networkProperties.template
+		data.Gateway = networkProperties.gateway
+		data.DefaultDomains = networkProperties.defaultDomains
+		data.DefaultView = networkProperties.defaultView
+		data.DNSRestrictions = networkProperties.dnsRestrictions
+		data.AllowDuplicateHost = networkProperties.allowDuplicateHost
+		data.PingBeforeAssign = networkProperties.pingBeforeAssign
+		data.InheritAllowDuplicateHost = networkProperties.inheritAllowDuplicateHost
+		data.InheritPingBeforeAssign = networkProperties.inheritPingBeforeAssign
+		data.InheritDNSRestrictions = networkProperties.inheritDNSRestrictions
+		data.InheritDefaultDomains = networkProperties.inheritDefaultDomains
+		data.InheritDefaultView = networkProperties.inheritDefaultView
+		data.LocationCode = networkProperties.locationCode
+		data.LocationInherited = networkProperties.locationInherited
+		data.CustomProperties = networkProperties.customProperties
 
-	addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*ipRange.Id, networkProperties.cidr.ValueString(), client)
-	if err != nil {
-		resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
-		resp.Diagnostics.AddError("Error calculating network usage", err.Error())
-		return
-	}
-	data.AddressesInUse = types.Int64Value(addressesInUse)
-	data.AddressesFree = types.Int64Value(addressesFree)
+		addressesInUse, addressesFree, err := getIP4NetworkAddressUsage(*ipRange.Id, networkProperties.cidr.ValueString(), client)
+		if err != nil {
+			diags.AddError("Error calculating network usage", err.Error())
+			return diags
+		}
+		data.AddressesInUse = types.Int64Value(addressesInUse)
+		data.AddressesFree = types.Int64Value(addressesFree)
 
-	resp.Diagnostics.Append(clientLogout(ctx, &client, mutex)...)
+		return diags
+	})...)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
