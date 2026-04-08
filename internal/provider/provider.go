@@ -41,7 +41,7 @@ type blueCatProviderModel struct {
 	BlueCatEndpoint types.String `tfsdk:"bluecat_endpoint"`
 	Username        types.String `tfsdk:"username"`
 	Password        types.String `tfsdk:"password"`
-	SSLVerify       types.Bool   `tfsdk:"ssl_verify"`
+	SkipSSLVerify   types.Bool   `tfsdk:"skip_ssl_verify"`
 }
 
 func (p *blueCatProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -65,9 +65,9 @@ func (p *blueCatProvider) Schema(ctx context.Context, req provider.SchemaRequest
 				Sensitive:           true,
 				MarkdownDescription: "The BlueCat Address Manager password. Can also use the environment variable `BLUECAT_PASSWORD`",
 			},
-			"ssl_verify": schema.BoolAttribute{
+			"skip_ssl_verify": schema.BoolAttribute{
 				Optional:    true,
-				Description: "Verify the SSL certificate of the BlueCat Address Manager endpoint?",
+				Description: "Skip SSL certificate verification for the BlueCat Address Manager endpoint.",
 			},
 		},
 	}
@@ -112,12 +112,12 @@ func (p *blueCatProvider) Configure(ctx context.Context, req provider.ConfigureR
 		)
 	}
 
-	if config.SSLVerify.IsUnknown() {
+	if config.SkipSSLVerify.IsUnknown() {
 		resp.Diagnostics.AddAttributeError(
-			path.Root("ssl_verify"),
-			"Unknown BlueCat API",
-			"The provider cannot create the BlueCat SOAP client as there is an unknown configuration value for the BlueCat SOAP password. "+
-				"Either target apply the source of the value first, set the value statically in the configuration, or use the BLUECAT_PASSWORD environment variable.",
+			path.Root("skip_ssl_verify"),
+			"Unknown BlueCat Skip SSL Verify Setting",
+			"The provider cannot create the BlueCat SOAP client as there is an unknown configuration value for skip_ssl_verify. "+
+				"Either target apply the source of the value first or set the value statically in the configuration.",
 		)
 	}
 
@@ -131,7 +131,7 @@ func (p *blueCatProvider) Configure(ctx context.Context, req provider.ConfigureR
 	endpoint := os.Getenv("BLUECAT_ENDPOINT")
 	username := os.Getenv("BLUECAT_USERNAME")
 	password := os.Getenv("BLUECAT_PASSWORD")
-	sslVerify := true
+	skipSSLVerify := false
 
 	if !config.BlueCatEndpoint.IsNull() {
 		endpoint = config.BlueCatEndpoint.ValueString()
@@ -145,8 +145,8 @@ func (p *blueCatProvider) Configure(ctx context.Context, req provider.ConfigureR
 		password = config.Password.ValueString()
 	}
 
-	if !config.SSLVerify.IsNull() {
-		sslVerify = config.SSLVerify.ValueBool()
+	if !config.SkipSSLVerify.IsNull() {
+		skipSSLVerify = config.SkipSSLVerify.ValueBool()
 	}
 
 	// If any of the expected configurations are missing, return
@@ -186,7 +186,7 @@ func (p *blueCatProvider) Configure(ctx context.Context, req provider.ConfigureR
 		return
 	}
 
-	client := gobam.NewClient(endpoint, sslVerify)
+	client := gobam.NewClient(endpoint, skipSSLVerify)
 	loginClient := &loginClient{Client: client, Username: username, Password: password}
 	// err := client.Login(username, password)
 	// if err != nil {
